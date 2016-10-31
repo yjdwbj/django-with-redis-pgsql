@@ -1,0 +1,156 @@
+- model: user_manager.SmsErrorTable
+  pk: 1
+  fields:
+        errcode: 10001 
+        msg: "账户为空"
+
+- model: user_manager.SmsErrorTable
+  pk: 2
+  fields:
+        errcode: 10002 
+        msg: "密码为空"
+
+- model: user_manager.SmsErrorTable
+  pk: 3
+  fields:
+        errcode: 10004 
+        msg: "短信内容为空"
+
+- model: user_manager.SmsErrorTable
+  pk: 4
+  fields:
+        errcode: 10005 
+        msg: "短信号码为空"
+
+- model: user_manager.SmsErrorTable
+  pk: 5
+  fields:
+        errcode: 10006 
+        msg: "短信号码有误"
+
+- model: user_manager.SmsErrorTable
+  pk: 6
+  fields:
+        errcode: 10007 
+        msg: "短信号码个数有误"
+
+- model: user_manager.SmsErrorTable
+  pk: 7
+  fields:
+        errcode: 10008 
+        msg: "短信模板为空"
+
+- model: user_manager.SmsErrorTable
+  pk: 8
+  fields:
+        errcode: 10009 
+        msg: "未找到匹配的模板ID"
+
+- model: user_manager.SmsErrorTable
+  pk: 9
+  fields:
+        errcode: 10010 
+        msg: "所传参数与模板不匹配"
+
+- model: user_manager.SmsErrorTable
+  pk: 10
+  fields:
+        errcode: 10011 
+        msg: "暂未状态报告"
+
+- model: user_manager.SmsErrorTable
+  pk: 11
+  fields:
+        errcode: 10012 
+        msg: "暂无上行"
+
+- model: user_manager.SmsErrorTable
+  pk: 12
+  fields:
+        errcode: 10013 
+        msg: "短信ID不能为空"
+
+- model: user_manager.SmsErrorTable
+  pk: 13
+  fields:
+        errcode: 10014 
+        msg: "短信ID无效"
+
+- model: user_manager.SmsErrorTable
+  pk: 14
+  fields:
+        errcode: 10015 
+        msg: "短信ID错误"
+
+- model: user_manager.SmsErrorTable
+  pk: 15
+  fields:
+        errcode: 10016 
+        msg: "手机号码不在此ID中"
+
+- model: user_manager.SmsErrorTable
+  pk: 16
+  fields:
+        errcode: 10017 
+        msg: "没有签名ID"
+
+- model: user_manager.SmsErrorTable
+  pk: 17
+  fields:
+        errcode: 10018 
+        msg: "签名ID有误"
+
+- model: user_manager.SmsErrorTable
+  pk: 18
+  fields:
+        errcode: 10019 
+        msg: "错误的时间戳"
+
+- model: user_manager.SmsErrorTable
+  pk: 19
+  fields:
+        errcode: 20001 
+        msg: "用户名或密码错误"
+
+- model: user_manager.SmsErrorTable
+  pk: 20
+  fields:
+        errcode: 20002 
+        msg: "账号被停用，请联系飞鸽客服！"
+
+- model: user_manager.SmsErrorTable
+  pk: 21
+  fields:
+        errcode: 20003 
+        msg: "账号被注销，请联系客服！"
+
+- model: user_manager.SmsErrorTable
+  pk: 22
+  fields:
+        errcode: 20004 
+        msg: "IP地址鉴权失败，请联系客服！"
+
+- model: user_manager.SmsErrorTable
+  pk: 23
+  fields:
+        errcode: 20005 
+        msg: "账户余额不足，请联系客服！"
+
+- model: user_manager.SmsErrorTable
+  pk: 24
+  fields:
+        errcode: -99 
+        msg: "通道屏蔽字"
+
+- model: user_manager.SmsErrorTable
+  pk: 25
+  fields:
+        errcode: -999 
+        msg: "IP黑名单"
+
+- model: user_manager.SmsErrorTable
+  pk: 26
+  fields:
+        errcode: -9999 
+        msg: "系统错误"
+

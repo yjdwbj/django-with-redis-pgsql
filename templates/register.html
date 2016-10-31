@@ -1,0 +1,76 @@
+{% extends "admin/login.html" %}
+{% block title %} 用户注册 {% endblock %}
+{% block branding %}
+
+<h1 id="site-name"><a href="{% url 'admin:index' %}">{{ site_header|default:_('注册') }}</a></h1>
+{% endblock %}
+{% block content %}
+
+<div class="container">
+  {% if form.non_field_errors %}
+  <div class="messages">
+    <div class="alert alert-warning alert-dismissible" role="alert">
+      <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+      {{ form.non_field_errors }}
+    </div>
+  </div>
+  {% endif %}
+  <div class="register center-block">
+    <div class="panel panel-default">
+      <div class="panel-body">
+        <form action="" method="post">{% csrf_token %}
+          <div class="form-group {% if form.email.errors %} has-error {% endif %}">
+            <label for="">{{ form.email.label }}</label>
+            {% if form.email.errors %}
+            <span class="text-danger pull-right">{{ form.email.errors }}</span>
+            {% endif %}
+            {{ form.email }}
+            <p class="help">{{ form.email.help_text }}</p>
+          </div>
+          <div class="form-group {% if form.password.errors %} has-error {% endif %}">
+            <label for="">{{ form.password.label }}</label>
+            {% if form.password.errors %}
+            <span class="text-danger pull-right">{{ form.password.errors }}</span>
+            {% endif %}
+            {{ form.password }}
+            <p class="help">{{ form.password.help_text }}</p>
+          </div>
+          <div class="form-group {% if form.confirm_password.errors %} has-error {% endif %}">
+            <label for="">{{ form.confirm_password.label }}</label>
+            {% if form.confirm_password.errors %}
+            <span class="text-danger pull-right">{{ form.confirm_password.errors }}</span>
+            {% endif %}
+            {{ form.confirm_password }}
+          </div>
+          <div class="form-group {% if form.phone.errors %} has-error {% endif %}">
+            <label for="">{{ form.phone.label }}</label>
+            {% if form.phone.errors %}
+            <span class="text-danger pull-right">{{ form.phone.errors }}</span>
+            {% endif %}
+            {{ form.phone }}
+            <p class="help">{{ form.phone.help_text }}</p>
+          </div>
+         {% block verify_code %}
+          <div id="verify_code"  {% if form.captcha.errors %} has-error {% endif %}>
+            <label for="">{{ form.captcha.label }}</label>
+            {% if form.captcha.errors %}
+            <span >{{ form.captcha.errors }}</span>
+            {% endif %}
+            {{ form.captcha }}
+              <img title=刷新验证码 id="code_image" src="/get_code/"/>
+              <a id="refresh" href="#" >看不清，换一张</a>
+          </div>
+          {% endblock %}
+          <div  class="btn-register">
+          <input name =""  type="submit" value="注册">
+            </div>
+          <div class='other-link'>
+          <a href='/admin/login/' >登录</a>
+          <a href='/password_reset/' >找回密码</a>
+      </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
