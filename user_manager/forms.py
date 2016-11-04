@@ -5,7 +5,7 @@ from .models import *
 from .views import *
 
 from django.db import IntegrityError
-
+from django.contrib.auth.hashers import make_password,check_password
 
 class AppRegForm(forms.Form):     
     password = forms.CharField(
@@ -58,15 +58,17 @@ class AppRegForm(forms.Form):
         phone = self.cleaned_data['phone']
         password = self.cleaned_data['password']
         uname  = uuid.uuid4().hex
+        
+        ipobj,ok = IpAddress.objects.get_or_create(ipaddr=self.request.META.get('REMOTE_ADDR'))
 #         try:
         obj = AppUser.objects.create(email = email,phone =phone,
-                           key=password,uuid = uname,
+                           key=make_password(password),uuid = uname,
                            uname = uname[:6],
                            regtime = timezone.now(),
-                           regip = self.request.META.get('REMOTE_ADDR'),
+                           regip = ipobj,
                            data = {})
     
-        obj.save()
+#         obj.save()
 #         except IntegrityError as e:
 #             print "except is---------------",e ,type(e)
 #             print "---------------------------"

@@ -7,11 +7,16 @@ from django.test.client import Client
 import time
 
 from .views import IotAppAuth, IotDevAuth, AppAction, AppQuery
-from .models import AppUser, SrvList, Devices
+from .models import *
 import uuid, json, hmac, hashlib
 from django.utils import timezone
 from collections import OrderedDict
 from django.db.backends.postgresql.base import IntegrityError
+
+localip,ok = IpAddress.objects.get_or_create(ipaddr='127.0.0.1',geoip=None)
+print "localhost ",localip
+
+from django.contrib.auth.hashers import make_password,check_password
 
 
 class dbTogeterTestCase(TestCase):
@@ -32,10 +37,10 @@ class dbTogeterTestCase(TestCase):
                                uname='pdpd',
                                uuid=self.uuid1,
                                email=self.email1,
-                               key='aaaaaa',
+                               key=make_password('aaaaaa'),
                                phone=self.phone1,
                                regtime=timezone.now(),
-                               regip='127.0.0.1',
+                               regip=localip,
                                data=self.profile,
                                    phone_active=True)
         
@@ -43,10 +48,10 @@ class dbTogeterTestCase(TestCase):
                                uname='ttt',
                                uuid=self.uuid2,
                                email=self.email2,
-                               key='1111aaa',
+                               key=make_password('aaaaaa'),
                                phone=self.phone2,
                                regtime=timezone.now(),
-                               regip='127.0.0.1',
+                               regip=localip,
                                data=self.profile,
                                    phone_active=True)
 #         obj1.save()
@@ -57,10 +62,10 @@ class dbTogeterTestCase(TestCase):
         try:
             AppUser.objects.create(uuid=self.uuid2,
                                    email=self.email1,
-                                   key='aaaaaa',
+                                   key=make_password('aaaaaa'),
                                    phone=self.phone2,
                                    regtime=timezone.now(),
-                                   regip='127.0.0.1',
+                                   regip=localip,
                                    data=self.profile,
                                    phone_active=True)   
         except :
@@ -72,10 +77,10 @@ class dbTogeterTestCase(TestCase):
         try:
             obj2 = AppUser.objects.create(uuid=self.uuid2,
                                    email=self.email2,
-                                   key='aaaaaa',
+                                   key=make_password('aaaaaa'),
                                    phone=self.phone1,
                                    regtime=timezone.now(),
-                                   regip='127.0.0.1',
+                                   regip=localip,
                                    data=self.profile,
                                    phone_active=True)
         except :
@@ -93,14 +98,15 @@ class IotAuthTestCase(TestCase):
         self.profile = {'b':'www.baidu.com',
                    'g':'www.google.com',
                    'a':'www.aplipy.com'}
+        ipobj,ok = IpAddress.objects.get_or_create(ipaddr='127.0.0.1',geoip=None)
         AppUser.objects.create(
                               uname='abc',
                               uuid=self.uuid1,
 #                             uuid = uuid.uuid4().hex,
                                email='www@test.com',
-                               key='123456', phone='13833339999',
+                               key=make_password('aaaaaa'), phone='13833339999',
                                regtime=timezone.now(),
-                               regip='127.0.0.1',
+                               regip=ipobj,
                                data=self.profile,
                                    phone_active=True)
         
@@ -109,9 +115,9 @@ class IotAuthTestCase(TestCase):
                               uuid=self.uuid2,
 #                             uuid = uuid.uuid4().hex,
                                email='www@test2.com',
-                               key='wwww4444', phone='13833339900',
+                               key=make_password('aaaaaa'), phone='13833339900',
                                regtime=timezone.now(),
-                               regip='127.0.0.1',
+                               regip=ipobj,
                                data=self.profile,
                                    phone_active=True)
         AppUser.objects.create(
@@ -119,24 +125,26 @@ class IotAuthTestCase(TestCase):
                               uuid=self.uuid3,
 #                             uuid = uuid.uuid4().hex,
                                email='www@test3.com',
-                               key='wwww4443', phone='13833339901',
+                               key=make_password('aaaaaa'), phone='13833339901',
                                regtime=timezone.now(),
-                               regip='127.0.0.1',
+                               regip=ipobj,
                                data=self.profile,
                                    phone_active=True)
         
         Devices.objects.create(uuid=uuid.uuid4().hex,
-                               key='44443333',
+                               key=make_password('aaaaaa'),
                                appkey='1111111',
                                regtime=timezone.now(),
                                name='test1',
+                               regip= ipobj,
                                mac='00:11:22:33:44:55')
         
         Devices.objects.create(uuid=uuid.uuid4().hex,
-                               key='44443332',
+                               key=make_password('aaaaaa'),
                                appkey='1111112',
                                regtime=timezone.now(),
                                name='test2',
+                               regip=ipobj,
                                mac='aa:11:22:33:44:55')
         
         SrvList.objects.create(ipaddr='8.8.8.87', port=1234,
@@ -147,7 +155,7 @@ class IotAuthTestCase(TestCase):
                                pubkey='dddddddddddddddddddddddddd')
         
     def test_AppBindDev(self):
-        print "start test app bind dev ......................."
+        print "start test app bind dev |||||||||||||||||||||||||||||||||||||||||||||||||||||||||"
         user = AppUser.objects.all()[0]
         user2 = AppUser.objects.all()[1]
         user3 = AppUser.objects.all()[2]
@@ -162,15 +170,15 @@ class IotAuthTestCase(TestCase):
         url = '/iot/app/opt/%s/%s/bind/' % (self.signid, dev.uuid.hex)
         
         post_request = RequestFactory()
-        post_request = post_request.post(url, json.dumps({'dkey':dev.key}), 'application/json; charset=utf-8')
-        post_request.__dict__['body'] = json.dumps({'dkey':dev.key})
+        post_request = post_request.post(url, json.dumps({'dkey':'aaaaaa'}), 'application/json; charset=utf-8')
+        post_request.__dict__['body'] = json.dumps({'dkey':'aaaaaa'})
        
-        print "start to---- bind dev ..........................."
-        print "request type ", type(post_request)
-        for (k, v) in post_request.__dict__.items():
-            print "key == ", k, "value ----", v
-            
-        print "body in ", 'body' in post_request.__dict__
+#         print "start to---- bind dev ..........................."
+#         print "request type ", type(post_request)
+#         for (k, v) in post_request.__dict__.items():
+#             print "key == ", k, "value ----", v
+#             
+#         print "body in ", 'body' in post_request.__dict__
         
         response = AppAction(post_request, self.signid, dev.uuid.hex, 'bind')
         print " ----------------------------------------------------------"
@@ -182,8 +190,8 @@ class IotAuthTestCase(TestCase):
         
         url = '/iot/app/opt/%s/%s/bind/' % (self.signid, dev2.uuid.hex)
         post_request = RequestFactory()
-        post_request = post_request.post(url, json.dumps({'dkey':dev2.key}), 'application/json; charset=utf-8')
-        post_request.__dict__['body'] = json.dumps({'dkey':dev2.key})
+        post_request = post_request.post(url, json.dumps({'dkey':'aaaaaa'}), 'application/json; charset=utf-8')
+        post_request.__dict__['body'] = json.dumps({'dkey':'aaaaaa'})
         response = AppAction(post_request, self.signid, dev2.uuid.hex, 'bind')
         print " ----------------------------------------------------------"
         print 'server bind dev response ', response.content
@@ -267,8 +275,8 @@ class IotAuthTestCase(TestCase):
         url = '/iot/app/opt/%s/%s/unbind/' % (self.signid, dev.uuid.hex)
        
         post_request = RequestFactory()
-        post_request = post_request.post(url, json.dumps({'dkey':dev.key}), 'application/json; charset=utf-8')
-        post_request.__dict__['body'] = json.dumps({'dkey':dev.key})
+        post_request = post_request.post(url, json.dumps({'dkey':'aaaaaa'}), 'application/json; charset=utf-8')
+        post_request.__dict__['body'] = json.dumps({'dkey':'aaaaaa'})
         
         response = AppAction(post_request, self.signid, dev.uuid.hex, 'unbind')
         
@@ -352,7 +360,7 @@ class IotAuthTestCase(TestCase):
         ########## test change ########
         
         url = '/iot/app/%s/change/' % self.signid
-        newdata = {'oldpass': user.key,
+        newdata = {'oldpass': 'aaaaaa',
                 'newpass':'12345678',
                 'phone':'13410103330',
                 'email':'test@abc.com.cn'}
@@ -460,6 +468,7 @@ class IotAuthTestCase(TestCase):
 #         data['key'] =  user.key
 #         data['time'] = time.strftime('%Y-%m-%d %H:%M:%S')
         data['resFlag'] = 'all'
+        data['key'] = 'aaaaaa'
 #         data['signMethod'] = 'HmacMD5'
         data['signMethod'] = 'HmacSHA1'
         msg = ''.join(['%s%s' % (k, v) for k, v in  OrderedDict(sorted(data.items())).items()])
@@ -485,20 +494,29 @@ class IotAuthTestCase(TestCase):
     def test_DevAuth(self):
         
         print "start test Dev Auth .........................."
-        dev = Devices.objects.all()[0]
+        dev = Devices.objects.all()[1]
+        
+        
         data = OrderedDict()
         data['uuid'] = dev.uuid.hex
 #         data['key'] = dev.key
         data['time'] = time.strftime('%Y-%m-%d %H:%M:%S')
         data['resFlag'] = 'all'
+        data['key'] = 'aaaaaa'
         data['signMethod'] = 'HmacSHA1'
         msg = ''.join(['%s%s' % (k, v) for k, v in  OrderedDict(sorted(data.items())).items()])
         data['sign'] = hmac.new(str(dev.key), msg,
                                 hashlib.sha1).hexdigest().upper()
-       
-        request = self.factory.get('/iot/dev/auth', data, False)
+        get_request = RequestFactory()
+
+        print "test DevAuth request",'&'.join(['%s=%s' % (k, v) for k, v in  OrderedDict(sorted(data.items())).items()])
+        request = get_request.get('/iot/dev/auth', data, False)
         response = IotDevAuth(request)
+        print "test DevAuth response",response
         d = json.loads(response.content);
+        
+        print "test DevAuth response",response,
+        print "test DevAuth Dict ",d
         self.assertEqual(d['success'], True)
         
    

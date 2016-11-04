@@ -26,6 +26,7 @@ from django.contrib.staticfiles import views
 urlpatterns = [
     url(r'^admin/', admin.site.urls),
     url(r'^iot/dev/auth/',IotDevAuth),
+    url(r'^iot/dev/active/(?P<account>\w+)/(?P<pwd>\w+)/$',IotDevActive),
     url(r'^iot/app/findpwd/(?P<account>\w+)/(?P<captcha>\d{6})/$',AppFindPwd),
     url(r'^iot/app/active/(?P<Md5sum>\w+)/(?P<smscode>\w+)/$',AppVerifyPhone),
     url(r'^iot/app/opt/(?P<token>\w+)/(?P<target>\w+)/(?P<action>\w+)/$',AppAction),

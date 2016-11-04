@@ -154,3 +154,10 @@
         errcode: -9999 
         msg: "系统错误"
 
+- model: user_manager.MqttAcl
+  pk: null
+  fields:
+        allow: 1
+        username: '$all'
+        access: 1
+        topic: '/SYS/SrvTime'
