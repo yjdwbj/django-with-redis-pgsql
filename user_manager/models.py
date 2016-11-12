@@ -4,12 +4,23 @@ from __future__ import unicode_literals
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser,BaseUserManager,PermissionsMixin
 from django.utils import timezone
-import email
 import uuid
 import json
 from django.contrib.postgres.fields import JSONField
 # Create your models here.
 
+class IpAddress(models.Model):
+    class Meta:
+        verbose_name = u'IP地址'
+        verbose_name_plural = verbose_name
+        db_table = 'iplist'
+        
+    ipaddr = models.GenericIPAddressField(unique = True,default='127.0.0.1',editable=False,max_length=15,
+                                          verbose_name=u'ip地址')
+    geoip = JSONField(null=True,verbose_name=u'位置信息')
+    
+    def __unicode__(self):
+        return self.ipaddr
 
 class AppUser(models.Model):
     class Meta:
@@ -20,10 +31,11 @@ class AppUser(models.Model):
     uname = models.CharField(unique = True,max_length=64,verbose_name =u'昵称') 
     email = models.EmailField(unique=True,verbose_name=u'邮箱')
     phone = models.CharField(unique=True,max_length=11,verbose_name=u'手机号码')
-    key = models.CharField(max_length=64,verbose_name=u'密钥')
+    key = models.CharField(max_length=128,verbose_name=u'密钥')
     uuid = models.UUIDField(primary_key=True,unique=True,default=uuid.uuid4().hex,editable=False,
                             verbose_name=u'用户ID')
-    regip = models.GenericIPAddressField(editable=False,max_length=15,verbose_name=u'注册IP')
+#     regip = models.GenericIPAddressField(editable=False,max_length=15,verbose_name=u'注册IP')
+    regip = models.ForeignKey(IpAddress,on_delete = models.CASCADE,verbose_name=u'注册地址')
     regtime = models.DateTimeField(default=timezone.now,verbose_name=u'注册时间')    
     data = JSONField(null=True,verbose_name=u'配置信息')
     phone_active = models.BooleanField(default=False,verbose_name=u'手机已验证')
@@ -35,30 +47,94 @@ class AppUser(models.Model):
         return dict(uname = self.uname,
                     uuid = self.uuid.hex,
                     data = json.dumps(self.data))
+
+
+        
+class AppUserLoginHistory(models.Model):
+    class Meta:
+        verbose_name = u'用户日志'
+        verbose_name_plural= verbose_name 
+        
+    user = models.ForeignKey(AppUser,on_delete = models.CASCADE,verbose_name=u'用户名')
+    inout = models.BooleanField(verbose_name=u'登入登出')
+    ipaddr = models.ForeignKey(IpAddress,on_delete = models.CASCADE,verbose_name=u'ip地址')
+#     city = models.CharField(null=True,max_length=30,verbose_name=u'位置')
+    optime = models.DateTimeField(default=timezone.now,verbose_name=u'时间')
     
+    def __unicode__(self):
+        return self.user.uname
+
+
+class DevicesMaker(models.Model):
+    class Meta:
+        verbose_name = u'生产端'
+        db_table = 'iotdevlist'
+        managed = False  ## 这个模武型是只读"devices"数据库的
+    
+    idlid = models.IntegerField(primary_key=True)
+    iot_mac =  models.CharField(max_length=45,verbose_name=u"MAC地址")
+    iot_uuid = models.CharField(max_length=64,unique=True,verbose_name=u'设备ID');
+    iot_key = models.CharField(max_length=32,verbose_name=u'密码')
+    iot_oper = models.CharField(max_length=64)
+    app_name = models.CharField(max_length=32)
+    app_key = models.CharField(max_length=32,verbose_name=u"APP key")
+    pdate = models.TimeField(verbose_name=u'生产时间')
+    audate = models.TimeField(verbose_name=u'授权时间')
+    acdate = models.TimeField(verbose_name=u'激活时间')
+    status = models.IntegerField(verbose_name=u"状态")
+    typeid = models.IntegerField(verbose_name=u"产品类型ID")
+    uid = models.IntegerField(verbose_name=u'企业ID')
+    imkid = models.IntegerField(verbose_name=u'人员')
+    info = models.CharField(max_length=128,verbose_name=u'备注')
+    
+    def __unicode__(self):
+        return self.iot_uuid       
 
 class Devices(models.Model):
     class Meta:
         verbose_name = u'设备管理'
         verbose_name_plural=verbose_name
-        unique_together = ("uuid","mac")
+        unique_together = ("uuid",)
         
-    mac = models.CharField(max_length=17,unique=True,blank=False,verbose_name=u'网卡地址');
-    key = models.CharField(max_length=8,blank=False,verbose_name=u'密码');
+    mac = models.CharField(max_length=17,blank=False,verbose_name=u'网卡地址');
+    key = models.CharField(max_length=128,blank=False,verbose_name=u'密码');
     appkey = models.CharField(max_length=8,unique=True,blank=False,verbose_name=u'APP密码');
     uuid = models.UUIDField(primary_key = True,default=uuid.uuid4().hex,unique=True,verbose_name=u'设备ID');
-    name = models.CharField(max_length=256,blank=True,verbose_name=u'名称');
+    name = models.CharField(max_length=256,null=True,blank=True,default=u'empty',verbose_name=u'名称');
+    regip = models.ForeignKey(IpAddress,on_delete = models.CASCADE,verbose_name=u'注册地址')
     regtime = models.DateTimeField(default=timezone.now,verbose_name=u'注册时间')  
     
     def __unicode__(self):
-        return self.name
+        return unicode(self.name) or u''
     
     def as_json(self):
+        f = lambda x: x if not x else u"empty"
         return dict(mac = self.mac,
-                    key = self.key,
+#                     key = self.key,
                     uuid = self.uuid.hex,
-                    name = self.name)
-
+                    name = f(self.name) )
+    def get_name(self):
+        return unicode(self.name) or u'empty'
+       
+        
+    
+class DevicesLoginHistory(models.Model):
+    class Meta:
+        verbose_name = u'设备日志'
+        verbose_name_plural= verbose_name 
+        
+    devices = models.ForeignKey(Devices,on_delete = models.CASCADE,verbose_name=u'用户名')
+    inout = models.BooleanField(verbose_name=u'登入登出')
+    ipaddr = models.ForeignKey(IpAddress,on_delete = models.CASCADE,verbose_name=u'ip地址')
+#     city = models.CharField(null=True,max_length=30,verbose_name=u'位置')
+    optime = models.DateTimeField(default=timezone.now,verbose_name=u'时间')
+    
+    def __unicode__(self):
+        return self.devices.name
+    
+    def get_uuid(self):
+        return self.devices.uuid.hex
+    get_uuid.short_description = u'唯一码UUID'
         
 class ShareLink(models.Model):
     class Meta:
@@ -95,7 +171,7 @@ class SharedDevList(models.Model):
     def __unicode__(self):
         return self.guest.uuid.hex()
     
-class AppDevList(models.Model):
+class AppBindDevList(models.Model):
     class Meta:
         verbose_name = u'用户设备列表'
         verbose_name_plural = verbose_name
@@ -108,6 +184,8 @@ class AppDevList(models.Model):
     bindtime = models.DateTimeField(default=timezone.now,null=False,verbose_name=u'绑定时间')
     def __unicode__(self):
         return str(self.appid.uuid)
+    
+    
     
 #     def get_dev(self):
 #         return self.devid.devid
@@ -193,7 +271,7 @@ class SmsErrorLog(models.Model):
         verbose_name_plural=verbose_name
         
     errcode = models.ForeignKey(SmsErrorTable,verbose_name =u'错误码')
-    ipaddr = models.GenericIPAddressField(max_length=15,null=True,verbose_name=u'IP地址'); 
+    ipaddr = models.ForeignKey(IpAddress,on_delete = models.CASCADE,verbose_name=u'注册地址') 
     addtime = models.DateTimeField(default=timezone.now,null=False,verbose_name=u'时间')
     phone = models.CharField(max_length=11,verbose_name=u'手机号码')
     
