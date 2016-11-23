@@ -1,4 +1,5 @@
 # coding: utf-8
+
 from django.shortcuts import render, render_to_response
 from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
@@ -33,9 +34,14 @@ from django.db.models.query import IntegrityError
 from django.utils.encoding import force_text
 from django.core import serializers
 import sendsms
+from sendsms import ErrDict
 from urllib2 import HTTPError
 
 from models import *
+from django.core.files import File
+from django.db.models.query import Q
+from uuid import UUID
+
 
 
 from django.contrib.auth.hashers import make_password, check_password
@@ -73,10 +79,18 @@ DupActError = json.dumps({"errorCode":"DupActError", "message":u"设备已经激
 JsonType = 'application/json; charset=utf-8'
 
 supportAlg = {'HmacMD5':hashlib.md5, 'HmacSHA1':hashlib.sha1, 'MD5':None}
+
+num = 0.0
+alltime = 0.0
+mintime  = 0.0
+maxtime  = 0.0
+
+
+
 # Create your views here.
 
 
-@csrf_exempt
+
 def get_verify_code(request):
     txt, img = captcha.get_code()
     request.session[request.COOKIES.get('csrftoken')] = txt
@@ -85,44 +99,17 @@ def get_verify_code(request):
 def PreCheckRequest(request, obj, data):   
 #     print len(data),data;
 #     signMethod = data.get('signMethod','')
-    argdict = OrderedDict(sorted(data.items()))
-    
-#     print "encode key ", obj.key, type(obj.key)
-   
     rawpwd = data.get('key', '')
 #     print "request key", rawpwd
     if not check_password(rawpwd, obj.key):
         return HttpResponse(UnAuth, content_type=JsonType)
     
-     
-#     agdict.pop('sign')
-#     content = json.dumps(argdict)
-#     txt = ['%s%s' % (k,v) for k,v in argdict.items()]
-#     print "request content",''.join(txt)
-#     srvsign = None
-#     if signMethod:
-#         lst = [cmp(signMethod,x)  for x in supportAlg.keys()]
-# #             print "result is " ,supportAlg.keys(),lst,lst.count(0)
-#         if not lst.count(0):  
-#             return HttpResponse(UnkownSignMethod,
-#                                 content_type=JsonType)
-#         else:
-#             srvsign = hmac.new(str(obj.key),''.join(txt),supportAlg[signMethod]).hexdigest().upper()
-#             print "signmethod",signMethod,'str is',srvsign
-#     else:
-#         srvsign = hmac.new(str(obj.key),''.join(txt),hashlib.md5).hexdigest().upper()
-#         print "srvsign md5",srvsign
-#     if cmp(srvsign,data.get('sign','')): ### 签名不正确
-#         return HttpResponse(SignError,
-#                                 content_type=JsonType)         
-    
 #     srvobj = SrvList.objects.annotate(max_mark=Min('concount')).filter(concount=F('max_mark'))
     # ##选取最小的连接数的服务器
     srvipaddr = '0.0.0.0'
-    retdict = OrderedDict()
+    retdict = {}
     hkey = 'null'
     try:
-        
         srvipaddr = SrvList.objects.values_list('ipaddr').annotate(Min('concount')).order_by('concount')[0]   
     except (ObjectDoesNotExist, IndexError) as e:
         retdict['servers'] = None
@@ -139,11 +126,10 @@ def PreCheckRequest(request, obj, data):
             retdict['pubkey'] = base64.b64encode(srvobj.pubkey) 
         retdict['mqttver'] = srvobj.mver
     retdict['time'] = str(int(time.time()))
-#     retdict = OrderedDict(sorted(retdict.items()))
-#     txt = ['%s%s' % (k,v) for k,v in retdict.items()]
-#     srvsign = hmac.new(str(obj.key),''.join(txt),supportAlg[signMethod])
-#     #     retdict['username'] = request.COOKIES.get('csrftoken','')
+    retdict['expire'] = settings.SESSION_COOKIE_AGE
+
     hasher, iterations, salt, code = obj.key.split('$')
+
     retdict['sign'] = hmac.new(str(salt), str(time.time())).hexdigest().upper()
     retdict['success'] = True
     hkey = retdict['sign']
@@ -155,15 +141,7 @@ def PreCheckRequest(request, obj, data):
     redis_pool.hset(hkey, 'ipaddr', ipaddr.ipaddr)
     redis_pool.hset(hkey, 'uuid', obj.uuid.hex)
     redis_pool.expire(hkey, settings.SESSION_COOKIE_AGE)
-#     cache.set(retdict['sign'],json.dumps({'ipaddr':request.META.get('REMOTE_ADDR'),
-#                                'uuid':obj.uuid.hex,
-#                                'pass':obj.key},ensure_ascii=True),
-#                                 timeout = settings.LOGIN_TIME_AGE)
-    
-#     print "cached value is",cache.get(retdict['sign'])
-#     cache.hset(sessionid,'ipaddr',request.META.get('REMOTE_ADDR'))
-#     cache.set(sessionid,{'uuid':uuid,'ipaddr':request.META.get('REMOTE_ADDR')},timeout=100)
-#     print "get sessionid from redis",cache.get(sessionid)     
+ 
 #     print "request",request.META   
 #     print "request",request.path
     if 'dev' in request.path:
@@ -172,9 +150,19 @@ def PreCheckRequest(request, obj, data):
         AppUserLoginHistory.objects.create(user=obj, inout=True, ipaddr=ipaddr, optime=timezone.now())
     return HttpResponse(json.dumps(retdict))
 
+def SqlTimeStatus(request):
+    avgtime = 0.0
+    try:
+        avgtime = settings.ALLTIME /settings.CONNUM  
+    except:
+        pass
+    status = str("numbers: %d\n" % settings.CONNUM) + str("alltime: %f\n" % settings.ALLTIME) \
+        +str("mintime: %f\n" % settings.MINTIME) \
+        +str("maxtime: %f\n" % settings.MAXTIME) \
+        + "avgtime: %f\n" % avgtime
+    return HttpResponse(status)
 
 
-@csrf_exempt
 def IotAppAuth(request):
     data = request.POST
     
@@ -184,34 +172,29 @@ def IotAppAuth(request):
     token = data.get('uuid', '')
     key = data.get('key', '')
 #     sign = data.get('sign','')
-    
+    obj = None;
     if not token or not key:
         return HttpResponse(DataMiss,
                                 content_type=JsonType)
-    obj = None
+    
+#     t = time.time()
+#     Person.objects.raw('SELECT * FROM myapp_person WHERE last_name = %s', [lname])
     try:
-        obj = AppUser.objects.get(phone=token)
-    except :
-        pass
-    if not obj:
+        val = UUID(token, version=4)
+        obj = AppUser.objects.raw('SELECT * FROM user_manager_appuser where uname = %s OR email = %s OR uuid = %s OR phone= %s',
+                                  [token,token,token,token])[0]
+    except (ObjectDoesNotExist,IndexError) as e:
+        return HttpResponse(UserNotExists,
+                                content_type=JsonType)
+    except ValueError:
+        # If it's a value error, then the string 
+        # is not a valid hex code for a UUID.
         try:
-            obj = AppUser.objects.get(email=token)
-        except :
-            pass
-    if not obj:
-        try:
-            obj = AppUser.objects.get(uname=token)
-        except :
-            pass
-        
-    if not obj:
-        try:
-            obj = AppUser.objects.get(uuid=token)
-        except (ObjectDoesNotExist, ValueError) as e:
-            pass
-#         except ValueError:
-#             return HttpResponse(FormatError,
-#                                 content_type=JsonType)
+            obj = AppUser.objects.raw('SELECT * FROM user_manager_appuser where uname = %s OR email = %s  OR phone= %s',
+                                  [token,token,token])[0]
+        except:
+            return HttpResponse(UserNotExists,
+                                content_type=JsonType)
             
     # ##　email,phone,uuid 都在数据库里找不到    
     if not obj:
@@ -224,7 +207,7 @@ def IotAppAuth(request):
     
     
 
-@csrf_exempt
+
 def IotDevAuth(request):
     data = request.POST
     
@@ -245,8 +228,7 @@ def IotDevAuth(request):
         
     return PreCheckRequest(request, obj, data)
 
-@sensitive_post_parameters()
-@csrf_exempt
+
 def IotAppRegister(request):
     data = request.POST
     if not data:
@@ -304,27 +286,34 @@ def IotAppRegister(request):
     else:
         return HttpResponse(ArgError, content_type=JsonType)
     
-    ipobj, ok = IpAddress.objects.get_or_create(ipaddr=request.META.get('REMOTE_ADDR'))
-    obj = AppUser.objects.create(email=email, phone=phone,
-                   key=make_password(key), uuid=uuid.uuid4().hex,
-                   uname=uname,
-                   regtime=timezone.now(),
-                   regip=ipobj,
-                   data={})
-    
-    obj.save()
+#     ipobj, ok = IpAddress.objects.get_or_create(ipaddr=request.META.get('REMOTE_ADDR'))
+#     obj = AppUser.objects.create(email=email, phone=phone,
+#                    key=make_password(key), uuid=uuid.uuid4().hex,
+#                    uname=uname,
+#                    regtime=timezone.now(),
+#                    regip=ipobj,
+#                    data={})
+#     
+#     obj.save()
     ### 注册成功,验证手机激活帐号#####
-    smscode = hashlib.md5(phone + str(time.time())).hexdigest().upper()
+    sendsms_code= hashlib.md5(phone + str(time.time())).hexdigest().upper()
     
-#     ipaddr = request.META.get('REMOTE_ADDR')
-    redis_pool.hset(smscode, 'phone', phone)
-    redis_pool.hset(smscode, 'ipaddr', ipobj.ipaddr)
-    redis_pool.expire(smscode, settings.SESSION_COOKIE_AGE)
-    return HttpResponse(json.dumps({"success":True, "uuid":obj.uuid, 'smscode':smscode}))
+    redis_pool.hset(sendsms_code,'email',email)
+    redis_pool.hset(sendsms_code,'key',key)
+    redis_pool.hset(sendsms_code,'uname',uname)
+    nuuid = uuid.uuid4().hex
+    redis_pool.hset(sendsms_code,'uuid',nuuid)
+    redis_pool.hset(sendsms_code,'register',1)
+    
+    
+    ipaddr = request.META.get('REMOTE_ADDR')
+    redis_pool.hset(sendsms_code, 'phone', phone)
+    redis_pool.hset(sendsms_code, 'ipaddr', ipaddr)
+    redis_pool.expire(sendsms_code, settings.SESSION_COOKIE_AGE)
+    return HttpResponse(json.dumps({"success":True, "uuid":nuuid, 'smscode':sendsms_code}))
    
 
-@sensitive_post_parameters()
-@csrf_exempt
+
 def AppRegister(request):
     if cmp(request.method, 'POST'):
         return render(request, 'register.html',
@@ -361,6 +350,14 @@ def AppRegister(request):
 
 
 
+def IotPing(request,token):
+    if not redis_pool.hget(token, 'uuid'):
+        return HttpResponse(UnAuth, content_type=JsonType)
+    else:
+        redis_pool.expire(token, settings.SESSION_COOKIE_AGE)
+        return HttpResponse(json.dumps({'success':True}),
+                            content_type=JsonType)
+        
 def GetRequestBody(request):
     if request.body:
         try:
@@ -406,7 +403,7 @@ def CheckBindDev(request, key, dev_uuid, user):
     else:
         return HttpResponse(BindError, content_type=JsonType)  # 已经绑定了
 
-@csrf_exempt 
+@csrf_exempt
 def AppBindDev(request, user, uuid):
    
 #     print "request POST",request.POST
@@ -450,7 +447,7 @@ def AppBindDev(request, user, uuid):
         return CheckBindDev(request, body.get('dkey', ''), dev_uuid, user)
 
     
-@csrf_exempt 
+
 def AppDropDev(request, user, target):
 #     print "request POST",request.POST
 #     for (k,v) in request.__dict__.items():
@@ -466,12 +463,7 @@ def AppDropDev(request, user, target):
         return HttpResponse(TargetNotExists,
                             content_type=JsonType)
     else:
-        
-#         if not check_password(body.get('dkey', ''), dev_uuid.key):
-# #             return HttpResponse(UnAuth,content_type=JsonType)
-# #         if body.get('dkey','') != dev_uuid.key:
-#             return HttpResponse(PwdError,
-#                             content_type=JsonType)
+        # 删除绑定,同时删除ＡＣＬ,这里对于数据库要用到事务.
         try:                    
             MqttAcl.objects.filter(username=user.uuid.hex, topic="/%s/#" % target).delete()    
         except :
@@ -487,7 +479,7 @@ def AppDropDev(request, user, target):
         return HttpResponse(json.dumps({"success":True}), content_type=JsonType)     
     
 
-@csrf_exempt 
+
 def IotDevActive(request,account,pwd):
     devid = account.upper()
     try:
@@ -529,7 +521,7 @@ def IotDevActive(request,account,pwd):
             
     
 
-@csrf_exempt 
+
 def AcceptBindLink(request, user, uuid):
 #     print "accept user %s to bind uuid %s" % (user.uuid.hex, uuid)
     try:
@@ -550,7 +542,7 @@ def AcceptBindLink(request, user, uuid):
                             content_type=JsonType)
 #         return JsonResponse({'success':True,'data':res},safe = False)
     
-@csrf_exempt 
+
 def AppShareDev(request, user, devuuid):
 #     print "request body",request.body
 #     print "body type",type(request.body)
@@ -581,8 +573,7 @@ def AppShareDev(request, user, devuuid):
                         content_type=JsonType)
         
                 
-        
-@csrf_exempt
+
 def AppAddFriend(request, user, uuid):
     try:
         friend = AppUser.objects.get(uuid=uuid)
@@ -598,7 +589,7 @@ def AppAddFriend(request, user, uuid):
         return HttpResponse(json.dumps({"success":True}),
                             content_type=JsonType)
 
-@csrf_exempt
+
 def AppRemoveFriend(request, user, uuid):
     try:
         friend = AppUser.objects.get(uuid=uuid)
@@ -610,15 +601,15 @@ def AppRemoveFriend(request, user, uuid):
         return HttpResponse(json.dumps({"success":True}),
                             content_type=JsonType)
     
-@csrf_exempt
+
 def AppUploadProfile(request, user):
     pass
 
-@csrf_exempt 
+
 def AppDownloadProfile(request, user):
     pass    
 
-@csrf_exempt 
+
 def AppVerifyPhone(request, Md5sum, smscode):
     phone = redis_pool.hget(Md5sum, 'phone')
     mysms = redis_pool.hget(Md5sum, 'sms')
@@ -630,13 +621,28 @@ def AppVerifyPhone(request, Md5sum, smscode):
         return HttpResponse(CaptchaError,
                             content_type=JsonType)
     
-    #### 已经验证了,清除内存
-    redis_pool.hdel(Md5sum, 'phone')
-    redis_pool.hdel(Md5sum, 'sms')
     
-    user = AppUser.objects.get(phone=phone)
-    user.phone_active = True;
-    user.save()
+    
+    
+    adict = redis_pool.hgetall(Md5sum)
+#     print "verify phone adict is", adict
+    
+    ipobj, ok = IpAddress.objects.get_or_create(ipaddr=redis_pool.hget(Md5sum,'ipaddr'))
+    try:
+        AppUser.objects.create(email =redis_pool.hget(Md5sum,'email'),
+                               phone = redis_pool.hget(Md5sum,'phone'),
+                               key = make_password(redis_pool.hget(Md5sum,'key')),
+                               uname = redis_pool.hget(Md5sum,'uname'),
+                               regtime = timezone.now(),
+                               regip = ipobj,
+                               phone_active = True,
+                               data = {'null':'null'})
+    except:
+        pass
+
+    #### 已经验证了,清除内存
+    for (k,v) in adict.items():
+        redis_pool.hdel(Md5sum,k)
     
     return HttpResponse(json.dumps({"success":True}),
                             content_type=JsonType)
@@ -649,12 +655,8 @@ actionFunc = {'bind':AppBindDev,
               'reqshare':AcceptBindLink,
               'sharedev':AppShareDev}
 
-@csrf_exempt
+
 def AppAction(request, token, target, action):
-#     print "app action  ",request,action
-    
-#     data =  json.loads(cache.get(token))
-#     print "data is type ",type(data),data
     ipaddr = request.META.get('REMOTE_ADDR')
     mem_addr = redis_pool.hget(token, 'ipaddr')
      
@@ -672,7 +674,6 @@ def AppAction(request, token, target, action):
                             content_type=JsonType)
     
 
-@csrf_exempt 
 def AppUserChange(request, user):
     body = GetRequestBody(request)
     if not body:
@@ -725,27 +726,43 @@ def AppUserChange(request, user):
     return HttpResponse(json.dumps({"success":True}),
                             content_type=JsonType)
 
-@csrf_exempt 
+
+def ChangeDevName(request,token,newname):
+    
+    devuuid = redis_pool.hget(token,'uuid')
+   
+    if not devuuid:
+        return HttpResponse(UnAuth,
+                            content_type=JsonType) 
+    try:
+        devobj =  Devices.objects.get(uuid=devuuid)
+    except:
+        return HttpResponse(TargetNotExists, content_type=JsonType)
+    else:
+        devobj.name = newname
+        devobj.save()
+        return HttpResponse(json.dumps({"success":True}),
+                        content_type=JsonType)
+    
+        
+        
+
 def AppQueryApp(request, user):
     applist = AppFriendList.objects.filter(my_uuid=user) 
     
     results = [ob.as_json() for ob in AppUser.objects.filter(friend_user__in=applist)]
     return HttpResponse(json.dumps({"list":results, "success":True}), content_type=JsonType)
 
-@csrf_exempt 
 def AppQueryDev(request, user):
     devlist = AppBindDevList.objects.filter(appid=user)
-#         lst = [ x['dev_uuid_id'].hex for x in devlist]
     lst = [x.devid.uuid.hex for x in devlist]
-#     print "devlist is",lst
     l = Devices.objects.filter(pk__in=lst)
-#     print "----query get device objects ",l
     results = [ ob.as_json() for ob in l]
     return HttpResponse(json.dumps({"list":results ,
                                     "success":True}),
                         content_type=JsonType)   
     
-@csrf_exempt 
+ 
 def AppSyncData(request, user):
     body = GetRequestBody(request)
     if not body:
@@ -756,33 +773,37 @@ def AppSyncData(request, user):
     return HttpResponse(json.dumps({"success":True}),
                             content_type=JsonType)
  
-@csrf_exempt 
+
 def AppSendSms(request, account):
     SENDCOUNT = 'sendcount'
-    phone = redis_pool.hget(account, 'phone')
+#     phone = redis_pool.hget(account, 'phone')
+    adict= redis_pool.hgetall(account)
+#     print "all key is",adict
     
-    if not phone:
+    if 'phone' not in adict:
         return HttpResponse(UnAuth, content_type=JsonType)
         
-    redis_pool.hdel(account, 'phone')
+
+#     redis_pool.hdel(account, 'phone')
 #     print "phone number ", phone 
     
     ### 同一号24小时只能发送三次短信. ###
-    sendnum = redis_pool.hget(phone, SENDCOUNT)
+    sendnum = redis_pool.hget(adict['phone'], SENDCOUNT)
 #     print "gettxt from redis", sendnum
     if sendnum and int(sendnum) == 3:
         return HttpResponse(SmsOverError, content_type=JsonType)
     
-    sendtime = redis_pool.hget(phone, 'lastime')
+    sendtime = redis_pool.hget(adict['phone'], 'lastime')
     
     if sendtime and (time.time() - int(sendtime)) < settings.SESSION_COOKIE_AGE / 10:
         return HttpResponse(SmsIntervalError, content_type=JsonType)
         
         
     
-    ipaddr = request.META.get('REMOTE_ADDR')
+#     ipaddr = request.META.get('REMOTE_ADDR')
+    ipobj, ok = IpAddress.objects.get_or_create(ipaddr=request.META.get('REMOTE_ADDR'))
     oldaddr = redis_pool.hget(account, 'ipaddr')
-    if cmp(ipaddr, oldaddr):
+    if cmp(ipobj.ipaddr, oldaddr):
         return HttpResponse(IpAddrError, content_type=JsonType)
     
     
@@ -793,32 +814,37 @@ def AppSendSms(request, account):
 #     redis_pool.expire(phone,settings.SESSION_COOKIE_AGE )
     
     try:
-        (sms, state) = sendsms.SendSMS(phone)
+        (sms, state) = sendsms.SendSMS(adict['phone'])
     except HTTPError:
         return HttpResponse(InternalError, content_type=JsonType)
     except IndexError:
-        SmsErrorLog.objects.create(-100, ipaddr, timezone.now, phone)
+        SmsErrorLog.objects.create(-100, ipobj, timezone.now, adict['phone'])
         return HttpResponse(InternalError, content_type=JsonType)
     if state == 0:
-        redis_pool.expire(phone, settings.SESSION_COOKIE_AGE)
-        redis_pool.hset(phone, 'lastime', int(time.time()))
+        redis_pool.expire(adict['phone'], settings.SESSION_COOKIE_AGE)
+        redis_pool.hset(adict['phone'], 'lastime', int(time.time()))
 #         redis_pool.expire(phone,settings.SESSION_COOKIE_AGE)
-        if redis_pool.hget(phone, SENDCOUNT):
-            redis_pool.hincrby(phone, SENDCOUNT, 1)
+        if redis_pool.hget(adict['phone'], SENDCOUNT):
+            redis_pool.hincrby(adict['phone'], SENDCOUNT, 1)
         else:
-            redis_pool.hset(phone, SENDCOUNT, 1)
-        resetcode = hashlib.md5(phone + str(time.time())).hexdigest().upper()
-        redis_pool.hset(resetcode, 'phone', phone)
+            redis_pool.hset(adict['phone'], SENDCOUNT, 1)
+        resetcode = hashlib.md5(adict['phone'] + str(time.time())).hexdigest().upper()
+        if 'register' in adict:
+            for (k,v) in adict.items():
+                redis_pool.hset(resetcode,k,v)
+        
+#         redis_pool.hset(resetcode, 'phone', phone)
         redis_pool.hset(resetcode, 'sms', sms)
+        print "reset code dict is",redis_pool.hgetall(resetcode)
         redis_pool.expire(resetcode, settings.SESSION_COOKIE_AGE)
         return HttpResponse(json.dumps({"success":True, 'rescode':resetcode}))
     else:
-        if state in sendsms.ErrDict:
+        if state in ErrDict:
             errobj = SmsErrorTable.objects.get(errcode=state)
-            SmsErrorLog.objects.create(errcode=errobj, ipaddr=ipaddr,
-                                       addtime=timezone.now(), phone=phone)
+            SmsErrorLog.objects.create(errcode=errobj, ipaddr=ipobj,
+                                       addtime=timezone.now(), phone=adict['phone'])
         if state == 10006 or state == 10007 or state == 10005:
-            return HttpResponse(json.dumps({"errorCode":"OtherError", "message":sendsms.ErrDict[state],
+            return HttpResponse(json.dumps({"errorCode":"OtherError", "message":ErrDict[state],
                                             "success":False}, ensure_ascii=False))
         else:
             return HttpResponse(InternalError, content_type=JsonType)
@@ -831,8 +857,7 @@ QueryFunc = {'querydev':AppQueryDev,
              'change':AppUserChange,
              'sendsms':AppSendSms}    
  
-
-@csrf_exempt 
+ 
 def AppResetPwd(request, Md5sum, newpass, smscode):
     phone = redis_pool.hget(Md5sum, 'phone')
     mysms = redis_pool.hget(Md5sum, 'sms')
@@ -849,18 +874,16 @@ def AppResetPwd(request, Md5sum, newpass, smscode):
     redis_pool.hdel(Md5sum, 'phone')
     redis_pool.hdel(Md5sum, 'sms')
     
-    user = AppUser.objects.get(phone=phone)
-    user.key = make_password(newpass)
-    user.save()
+    try:
+        user = AppUser.objects.get(phone=phone)
+        user.key = make_password(newpass)
+        user.save()
+    except:
+        pass
     
     return HttpResponse(json.dumps({"success":True}),
                             content_type=JsonType)
-        
-        
     
-    
-
-@csrf_exempt 
 def AppFindPwd(request, account, captcha):
 #     print "find pwd first", account, captcha
     if not account or not captcha:
@@ -875,39 +898,31 @@ def AppFindPwd(request, account, captcha):
         return HttpResponse(CaptchaError,
                             content_type=JsonType)
 
-    accstr = None
     try:
-        accstr = AppUser.objects.get(uname=account)
-    except ObjectDoesNotExist:
-        pass
-
-    try:
-        accstr = AppUser.objects.get(phone=account)
-    except ObjectDoesNotExist:
-        pass
-    
-    try:
-        accstr = AppUser.objects.get(email=account)
-    except ObjectDoesNotExist:
-        pass
-    
-    if not accstr:
-        return HttpResponse(TargetNotExists, content_type=JsonType)
-     
-    smscode = hashlib.md5(accstr.phone + str(time.time())).hexdigest().upper()
-    ipaddr = request.META.get('REMOTE_ADDR')
-    redis_pool.hset(smscode, 'phone', accstr.phone)
-    redis_pool.hset(smscode, 'ipaddr', ipaddr)
-    redis_pool.expire(smscode, settings.SESSION_COOKIE_AGE)
-    
-    res = {'name': accstr.uname,
-                          'phone': "%s****%s" % (accstr.phone[:3], accstr.phone[-4:]),
-                          'smscode': smscode,
-                          'success':True}
-    return HttpResponse(json.dumps(res), content_type=JsonType)
+        accobj = AppUser.objects.raw('SELECT * FROM user_manager_appuser where uname = %s OR email = %s  OR phone= %s',
+                              [account,account,account])[0]
+    except:
+        return HttpResponse(UserNotExists,
+                            content_type=JsonType)
+    else:
+            
+        if not accobj:
+            return HttpResponse(TargetNotExists, content_type=JsonType)
+         
+        smscode = hashlib.md5(accobj.phone + str(time.time())).hexdigest().upper()
+        ipaddr = request.META.get('REMOTE_ADDR')
+        redis_pool.hset(smscode, 'phone', accobj.phone)
+        redis_pool.hset(smscode, 'ipaddr', ipaddr)
+        redis_pool.expire(smscode, settings.SESSION_COOKIE_AGE)
+        
+        res = {'name': accobj.uname,
+                              'phone': "%s****%s" % (accobj.phone[:3], accobj.phone[-4:]),
+                              'smscode': smscode,
+                              'success':True}
+        return HttpResponse(json.dumps(res), content_type=JsonType)
     
         
-@csrf_exempt    
+    
 def AppQuery(request, token, action):
 #     data = json.loads(cache.get(token))
     ipaddr = request.META.get('REMOTE_ADDR')
@@ -941,16 +956,4 @@ def AppQuery(request, token, action):
         return HttpResponse(UnkownAction,
                             content_type=JsonType)
      
-        
-
-        
-@csrf_exempt 
-def TestPostJson(request):
-    print "request data", request.POST
-    newdict = json.loads(request.body)
-    print 'new dict', json.dumps(newdict)
-    return HttpResponse(json.dumps({"success":True}),
-                            content_type=JsonType)
-    
-    
         

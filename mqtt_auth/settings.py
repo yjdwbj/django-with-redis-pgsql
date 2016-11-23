@@ -12,7 +12,6 @@ https://docs.djangoproject.com/en/1.10/ref/settings/
 
 import os
 
-
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -26,7 +25,7 @@ SECRET_KEY = 'g4lwr(vyn&l83zk+%(++f#x0a8p@5mp0tr$%++i+bl@+g#k2gh'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['127.0.0.1']
+ALLOWED_HOSTS = ['*']
 
 SESSION_SAVE_EVERY_REQUEST = True
 SESSION_COOKIE_AGE = 600
@@ -37,12 +36,13 @@ SECURE_HSTS_SECONDS = 315600
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
+#         "LOCATION" : "unix://:f4e4821080ca489d3361a520fc2123495755559b45fb24323c5b02e79163e425@/var/run/redis/redis.sock?db=1",
         "LOCATION": "redis://:f4e4821080ca489d3361a520fc2123495755559b45fb24323c5b02e79163e425@192.168.25.100:6379",
         "OPTIONS": {
             "DB":0,
             "PASSWORD":"f4e4821080ca489d3361a520fc2123495755559b45fb24323c5b02e79163e425",
             
-            "CONNECTION_POOL_KWARGS": {"max_connections": 100},
+            "CONNECTION_POOL_KWARGS": {"max_connections": 65535},
         }
     }
 }
@@ -51,65 +51,65 @@ SESSION_ENGINE = "django.contrib.sessions.backends.cache"
 SESSION_CACHE_ALIAS = "default"
 
 
-BOOTSTRAP3 = {
-
-    # The URL to the jQuery JavaScript file
-    'jquery_url': '//code.jquery.com/jquery.min.js',
-
-    # The Bootstrap base URL
-    'base_url': '//maxcdn.bootstrapcdn.com/bootstrap/3.3.7/',
-
-    # The complete URL to the Bootstrap CSS file (None means derive it from base_url)
-    'css_url': None,
-
-    # The complete URL to the Bootstrap CSS file (None means no theme)
-    'theme_url': None,
-
-    # The complete URL to the Bootstrap JavaScript file (None means derive it from base_url)
-    'javascript_url': None,
-
-    # Put JavaScript in the HEAD section of the HTML document (only relevant if you use bootstrap3.html)
-    'javascript_in_head': False,
-
-    # Include jQuery with Bootstrap JavaScript (affects django-bootstrap3 template tags)
-    'include_jquery': False,
-
-    # Label class to use in horizontal forms
-    'horizontal_label_class': 'col-md-3',
-
-    # Field class to use in horizontal forms
-    'horizontal_field_class': 'col-md-9',
-
-    # Set HTML required attribute on required fields
-    'set_required': True,
-
-    # Set HTML disabled attribute on disabled fields
-    'set_disabled': False,
-
-    # Set placeholder attributes to label if no placeholder is provided
-    'set_placeholder': True,
-
-    # Class to indicate required (better to set this in your Django form)
-    'required_css_class': '',
-
-    # Class to indicate error (better to set this in your Django form)
-    'error_css_class': 'has-error',
-
-    # Class to indicate success, meaning the field has valid input (better to set this in your Django form)
-    'success_css_class': 'has-success',
-
-    # Renderers (only set these if you have studied the source and understand the inner workings)
-    'formset_renderers':{
-        'default': 'bootstrap3.renderers.FormsetRenderer',
-    },
-    'form_renderers': {
-        'default': 'bootstrap3.renderers.FormRenderer',
-    },
-    'field_renderers': {
-        'default': 'bootstrap3.renderers.FieldRenderer',
-        'inline': 'bootstrap3.renderers.InlineFieldRenderer',
-    },
-}
+# BOOTSTRAP3 = {
+# 
+#     # The URL to the jQuery JavaScript file
+#     'jquery_url': '//code.jquery.com/jquery.min.js',
+# 
+#     # The Bootstrap base URL
+#     'base_url': '//maxcdn.bootstrapcdn.com/bootstrap/3.3.7/',
+# 
+#     # The complete URL to the Bootstrap CSS file (None means derive it from base_url)
+#     'css_url': None,
+# 
+#     # The complete URL to the Bootstrap CSS file (None means no theme)
+#     'theme_url': None,
+# 
+#     # The complete URL to the Bootstrap JavaScript file (None means derive it from base_url)
+#     'javascript_url': None,
+# 
+#     # Put JavaScript in the HEAD section of the HTML document (only relevant if you use bootstrap3.html)
+#     'javascript_in_head': False,
+# 
+#     # Include jQuery with Bootstrap JavaScript (affects django-bootstrap3 template tags)
+#     'include_jquery': False,
+# 
+#     # Label class to use in horizontal forms
+#     'horizontal_label_class': 'col-md-3',
+# 
+#     # Field class to use in horizontal forms
+#     'horizontal_field_class': 'col-md-9',
+# 
+#     # Set HTML required attribute on required fields
+#     'set_required': True,
+# 
+#     # Set HTML disabled attribute on disabled fields
+#     'set_disabled': False,
+# 
+#     # Set placeholder attributes to label if no placeholder is provided
+#     'set_placeholder': True,
+# 
+#     # Class to indicate required (better to set this in your Django form)
+#     'required_css_class': '',
+# 
+#     # Class to indicate error (better to set this in your Django form)
+#     'error_css_class': 'has-error',
+# 
+#     # Class to indicate success, meaning the field has valid input (better to set this in your Django form)
+#     'success_css_class': 'has-success',
+# 
+#     # Renderers (only set these if you have studied the source and understand the inner workings)
+#     'formset_renderers':{
+#         'default': 'bootstrap3.renderers.FormsetRenderer',
+#     },
+#     'form_renderers': {
+#         'default': 'bootstrap3.renderers.FormRenderer',
+#     },
+#     'field_renderers': {
+#         'default': 'bootstrap3.renderers.FieldRenderer',
+#         'inline': 'bootstrap3.renderers.InlineFieldRenderer',
+#     },
+# }
 
 PASSWORD_HASER=[
         "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
@@ -126,7 +126,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'bootstrap3',
+#     'bootstrap3',
+    'gunicorn',
     'user_manager',
 ]
 
@@ -134,10 +135,11 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+#     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+#     'django_cprofile_middleware.middleware.ProfilerMiddleware',
 ]
 
 ROOT_URLCONF = 'mqtt_auth.urls'
@@ -161,6 +163,11 @@ TEMPLATES = [
 WSGI_APPLICATION = 'mqtt_auth.wsgi.application'
 
 
+CONNUM = 0
+ALLTIME = 0.0
+MINTIME = 0.0
+MAXTIME = 0.0
+
 # Database
 # https://docs.djangoproject.com/en/1.10/ref/settings/#databases
 
@@ -171,16 +178,16 @@ DATABASES = {
         'NAME' : 'mqtt',
         'USER' :'mqtt',
         'PASSWORD':'mqtt',
-        'HOST' : '127.0.0.1',
-        'PORT' : '5432',
+        'HOST' : '192.168.25.100',
+        'PORT' : '5433',
 #         'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
     },
     'devdb':{
         'ENGINE':'django.db.backends.postgresql_psycopg2',
-        'NAME' : 'devdb',
-        'USER' : 'mqtt',
-        'PASSWORD':'mqtt123',
-        'HOST':'127.0.0.1',
+        'NAME' : 'jieli_iot_idmaker',
+        'USER' : 'postgres',
+        'PASSWORD':'',
+        'HOST':'192.168.25.105',
         'PORT':'5432',
         }
 
@@ -217,7 +224,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Shanghai'
 
 USE_I18N = True
 

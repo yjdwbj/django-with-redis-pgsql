@@ -6,7 +6,7 @@ from django.test.client import Client
 
 import time
 
-from .views import IotAppAuth, IotDevAuth, AppAction, AppQuery
+from .views import IotAppAuth, IotDevAuth, AppAction, AppQuery,IotPing,ChangeDevName
 from .models import *
 import uuid, json, hmac, hashlib
 from django.utils import timezone
@@ -173,12 +173,6 @@ class IotAuthTestCase(TestCase):
         post_request = post_request.post(url, json.dumps({'dkey':'aaaaaa'}), 'application/json; charset=utf-8')
         post_request.__dict__['body'] = json.dumps({'dkey':'aaaaaa'})
        
-#         print "start to---- bind dev ..........................."
-#         print "request type ", type(post_request)
-#         for (k, v) in post_request.__dict__.items():
-#             print "key == ", k, "value ----", v
-#             
-#         print "body in ", 'body' in post_request.__dict__
         
         response = AppAction(post_request, self.signid, dev.uuid.hex, 'bind')
         print " ----------------------------------------------------------"
@@ -197,6 +191,20 @@ class IotAuthTestCase(TestCase):
         print 'server bind dev response ', response.content
         d = json.loads(response.content)
         self.assertEqual(d['success'], True)
+        
+        
+        
+        ######### test device name ###################
+        ##url(r'^iot/app/chamgedev/(?P<token>\w+)/(?P<target>\w+)/(?P<newname>\w+)/$',ChangeDevName),
+        print "----------------- test change device name ---------------------------"
+        url = '/iot/app/changedev/%s/%s/' % (self.signid,"test123")
+        request = self.factory.get(url)
+        response = ChangeDevName(request,self.signid,"test1234")
+        d = json.loads(response.content)
+        print ("return d",d)
+        self.assertEqual(d['success'], True)
+                
+        
         
         ############## test query bind list ##########
         
@@ -378,6 +386,17 @@ class IotAuthTestCase(TestCase):
         
         self.assertEqual(d['success'], True)
         
+        ### test iot ping ####################
+        
+        url = '/iot/ping/%s/' % self.signid
+        request = self.factory.get(url)
+        response = IotPing(request, self.signid)
+        d = json.loads(response.content)
+        
+        self.assertEqual(d['success'], True)
+        
+
+        
         
     
     def test_ErrorDataAction(self):
@@ -454,6 +473,13 @@ class IotAuthTestCase(TestCase):
         d = json.loads(response.content)
         
         self.assertEqual(d['success'], False)
+        
+        
+
+        
+        
+        
+        
        
         
         

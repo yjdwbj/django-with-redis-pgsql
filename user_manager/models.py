@@ -34,6 +34,8 @@ class AppUser(models.Model):
     key = models.CharField(max_length=128,verbose_name=u'密钥')
     uuid = models.UUIDField(primary_key=True,unique=True,default=uuid.uuid4().hex,editable=False,
                             verbose_name=u'用户ID')
+    
+    
 #     regip = models.GenericIPAddressField(editable=False,max_length=15,verbose_name=u'注册IP')
     regip = models.ForeignKey(IpAddress,on_delete = models.CASCADE,verbose_name=u'注册地址')
     regtime = models.DateTimeField(default=timezone.now,verbose_name=u'注册时间')    
@@ -41,7 +43,7 @@ class AppUser(models.Model):
     phone_active = models.BooleanField(default=False,verbose_name=u'手机已验证')
     
     def __unicode__(self):
-        return str(self.uname)  
+        return unicode(self.uname)  
     
     def as_json(self):
         return dict(uname = self.uname,
@@ -62,7 +64,7 @@ class AppUserLoginHistory(models.Model):
     optime = models.DateTimeField(default=timezone.now,verbose_name=u'时间')
     
     def __unicode__(self):
-        return self.user.uname
+        return unicode(self.user.uname)
 
 
 class DevicesMaker(models.Model):

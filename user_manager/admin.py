@@ -1,5 +1,8 @@
 #coding: utf-8
 from django.contrib import admin
+from django.forms import ModelForm
+from django.forms.fields import  DateTimeField
+from django import forms
 from .models import *
 from uuid import uuid4
 from user_manager.models import SmsErrorLog
@@ -9,6 +12,7 @@ from django.db import  transaction
 from django.views.decorators.csrf import csrf_protect
 
 from django.contrib.auth.hashers import make_password,check_password
+
 
 
 
@@ -58,7 +62,7 @@ class DevicesAdmin(MyCustomAdmin):
     
 
 class AppUserAdmin(MyCustomAdmin):
-    list_display = ('uname','phone','view_ip','key','regtime','phone_active')
+    list_display = ('uname','uuid','phone','view_ip','key','regtime','phone_active')
     
 #     def __init__(self,*args,**kwargs):
 #         super(AppUserAdmin,self).__init__(*args,**kwargs)
@@ -152,8 +156,8 @@ class ServerAdmin(admin.ModelAdmin):
     list_display = ('ipaddr','port','mver','concount')
     
     
-class SendSmsErrorAdmin(admin.ModelAdmin):
-    list_display = ("phone","errcode","addtime")
+class SendSmsErrorAdmin(ReadOnlyAdmin):
+    list_display = ("phone","errcode","addtime","ipaddr")
     
 # class IdMakerAdmin(admin.ModelAdmin):
 #     using ='devdb'
@@ -182,6 +186,16 @@ class SendSmsErrorAdmin(admin.ModelAdmin):
 #         return super(IdMakerAdmin, self).formfield_for_manytomany(db_field, request, using=self.using, **kwargs)
 #     
         
+# class TimeFormat(ModelForm):
+#     class Meta:
+#         model = AppUserLoginHistory
+#     def __init__(self, *args, **kwargs):
+#         super(TimeFormat, self).__init__(*args, **kwargs)
+#         
+#     tt = forms.DateTimeField(input_formats=['%Y-%m-%d %H:%M:%S'])
+#     
+# class AppAdminTest(ReadOnlyAdmin):
+#     form = TimeFormat
 
 admin.site.register(Devices,DevicesAdmin)
 admin.site.register(AppUser,AppUserAdmin)
