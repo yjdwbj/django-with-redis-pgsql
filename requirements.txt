@@ -1,0 +1,17 @@
+filemagic
+django
+Pillow
+numpy
+matplotlib
+psycopg2
+twisted
+tornado
+sqlalchemy
+redis
+django_redis
+flask
+gevent
+PyYAML
+cffi
+scipy
+six
