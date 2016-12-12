@@ -2,12 +2,48 @@
 from __future__ import unicode_literals
 
 from django.db import models
+from django.conf import settings
 from django.contrib.auth.models import AbstractBaseUser,BaseUserManager,PermissionsMixin
 from django.utils import timezone
 import uuid
 import json
+import base64,magic
 from django.contrib.postgres.fields import JSONField
+from django.core.exceptions import ObjectDoesNotExist
 # Create your models here.
+
+from django.contrib.auth.hashers import PBKDF2SHA1PasswordHasher
+from django.contrib.auth.hashers import UNUSABLE_PASSWORD_PREFIX,UNUSABLE_PASSWORD_SUFFIX_LENGTH
+from django.utils.crypto import (
+    constant_time_compare, get_random_string, pbkdf2,
+)
+
+class MyPBKDF2PasswordHasher(PBKDF2SHA1PasswordHasher):
+    """
+    A subclass of PBKDF2PasswordHasher that uses 100 times more iterations.
+    """
+    iterations = settings.PBKDF2_ITERATIONS
+    
+
+def make_password(password, salt=None):
+    """
+    Turn a plain-text password into a hash for database storage
+
+    Same as encode() but generates a new random salt.
+    If password is None then a concatenation of
+    UNUSABLE_PASSWORD_PREFIX and a random string will be returned
+    which disallows logins. Additional random string reduces chances
+    of gaining access to staff or superuser accounts.
+    See ticket #20079 for more info.
+    """
+    if password is None:
+        return UNUSABLE_PASSWORD_PREFIX + get_random_string(UNUSABLE_PASSWORD_SUFFIX_LENGTH)
+    hasher = MyPBKDF2PasswordHasher()
+    if not salt:
+        salt = hasher.salt()
+
+    return hasher.encode(password, salt)
+        
 
 class IpAddress(models.Model):
     class Meta:
@@ -27,8 +63,9 @@ class AppUser(models.Model):
         verbose_name = u'用户管理'
         verbose_name_plural = verbose_name
         unique_together = ("email","phone","uuid","uname")
+    GENDER_CHOICES=((0,u'-'),(1,u'男'),(2,u'女'))
     
-    uname = models.CharField(unique = True,max_length=64,verbose_name =u'昵称') 
+    uname = models.CharField(unique = True,max_length=64,verbose_name =u'用户名') 
     email = models.EmailField(unique=True,verbose_name=u'邮箱')
     phone = models.CharField(unique=True,max_length=11,verbose_name=u'手机号码')
     key = models.CharField(max_length=128,verbose_name=u'密钥')
@@ -39,17 +76,46 @@ class AppUser(models.Model):
 #     regip = models.GenericIPAddressField(editable=False,max_length=15,verbose_name=u'注册IP')
     regip = models.ForeignKey(IpAddress,on_delete = models.CASCADE,verbose_name=u'注册地址')
     regtime = models.DateTimeField(default=timezone.now,verbose_name=u'注册时间')    
-    data = JSONField(null=True,verbose_name=u'配置信息')
+    data = JSONField(null=True,default={'null':'null'},verbose_name=u'配置信息')
     phone_active = models.BooleanField(default=False,verbose_name=u'手机已验证')
+    nickname = models.CharField(null=True,max_length=64,verbose_name=u'昵称')
+    sex = models.IntegerField(choices=GENDER_CHOICES,default=0,verbose_name=u'性别')
+    avatar = models.BinaryField(verbose_name=u'头像')
+    
     
     def __unicode__(self):
-        return unicode(self.uname)  
+        return self.uname  
     
     def as_json(self):
         return dict(uname = self.uname,
                     uuid = self.uuid.hex,
-                    data = json.dumps(self.data))
-
+                    email = self.email,
+                    phone = self.phone,
+                    nickname = self.nickname,
+                    sex = self.sex)
+        
+    def avatar_url(self):
+        if len(self.avatar) > 0:
+            return "data:%s;base64,%s" % (self.get_mimetype,self.avatar)
+        else:
+            return "data:image/png;base64,AB"
+        
+    def get_mimetype(self):
+        if len(self.avatar) > 0:
+#             rawdata = base64.b64decode(self.avatar)
+            btype = magic.Magic().id_buffer(self.avatar)
+            return "image/%s" % btype.split(' ')[0].lower()
+        
+    def save(self, *args, **kw):
+        if self.pk is not None:
+            try:
+                orig = AppUser.objects.get(pk=self.pk)
+                if orig.key != self.key:
+                    self.key = make_password(self.key)
+            except ObjectDoesNotExist:
+                pass
+        super(AppUser, self).save(*args, **kw)
+        
 
         
 class AppUserLoginHistory(models.Model):
@@ -138,40 +204,43 @@ class DevicesLoginHistory(models.Model):
         return self.devices.uuid.hex
     get_uuid.short_description = u'唯一码UUID'
         
-class ShareLink(models.Model):
-    class Meta:
-        verbose_name = u'分享链接'
-        verbose_name_plural=verbose_name
-        db_table = 'share_request'
-        
-    sharer = models.ForeignKey(AppUser,editable = False,on_delete = models.CASCADE ,
-                               null = False,verbose_name = u'分享者')
-    
-#     guest = models.ForeignKey(AppUser,editable = False,on_delete = models.CASCADE,
-#                               related_name = 'guest_user')
-    sharedev = models.ForeignKey(Devices,editable = False,on_delete = models.CASCADE,
-                                null = False,verbose_name = u'设备')
-    otpuuid = models.UUIDField(verbose_name = u'一次性ID')
-    bodydata = JSONField(verbose_name = u'数据')
+# class ShareLink(models.Model):
+#     class Meta:
+#         verbose_name = u'分享链接'
+#         verbose_name_plural=verbose_name
+#         db_table = 'share_request'
+#         
+#     sharer = models.ForeignKey(AppUser,editable = False,on_delete = models.CASCADE ,
+#                                null = False,verbose_name = u'分享者')
+#     
+# #     guest = models.ForeignKey(AppUser,editable = False,on_delete = models.CASCADE,
+# #                               related_name = 'guest_user')
+#     sharedev = models.ForeignKey(Devices,editable = False,on_delete = models.CASCADE,
+#                                 null = False,verbose_name = u'设备')
+#     otpuuid = models.UUIDField(verbose_name = u'一次性ID')
+#     bodydata = JSONField(verbose_name = u'数据')
     
 class SharedDevList(models.Model):
     class Meta:
         verbose_name = u'分享设备'
         verbose_name_plural = verbose_name
-        db_table ='devices_shared'
+        db_table ="link_shared"
     
     host = models.ForeignKey(AppUser,editable=False,on_delete=models.CASCADE,
                              related_name='host_user',null = False,
                              verbose_name =u'所有者')    
     guest = models.ForeignKey(AppUser,editable=False,on_delete=models.CASCADE,null=False,
-                              verbose_name =u'分享')
+                              verbose_name =u'接受者')
     sdevice = models.ForeignKey(Devices,editable = False,on_delete= models.CASCADE,null=False,
                             verbose_name =u'设备')
-    isshared = models.BooleanField(default = False,verbose_name=u'分享成功?')
+    topics = JSONField(verbose_name=u'分享主题')
+    
+    
+#     isshared = models.BooleanField(default = False,verbose_name=u'分享成功?')
 #     topic = models.CharField(max_length=256,blank=False,verbose_name=u"主题")
     
     def __unicode__(self):
-        return self.guest.uuid.hex()
+        return str(self.guest_id)
     
 class AppBindDevList(models.Model):
     class Meta:
@@ -205,23 +274,44 @@ class AppFriendList(models.Model):
     def __unicode__(self):
         return str(self.my_uuid.uuid)
 
+
+class MqttTopics(models.Model):
+    class Meta:
+        verbose_name = u"主题列表"
+        db_table = "mqtt_topics"
+        verbose_name_plural = verbose_name
+        unique_together = ("id","topic")
+        
+    topic = models.CharField(max_length=100,null=False,verbose_name=u"主题")
+    
+    def __unicode__(self):
+        return self.topic
+
 class MqttAcl(models.Model):
     class Meta:
         verbose_name = u'访问列表'
         db_table = "mqtt_acl"
         verbose_name_plural = verbose_name
         unique_together = ("id",)
+    
+    ACL_CHOICES=((1,u'订阅'),(2,u'发布'),(3,u'订阅发布'))
         
     allow = models.IntegerField(verbose_name=u'允许')
     ipaddr = models.GenericIPAddressField(max_length=15,null=True,verbose_name=u'IP地址');
-    username = models.CharField(max_length=100,null=True,verbose_name=u'用户名')
+#     username = models.CharField(max_length=100,null=True,verbose_name=u'用户名')
+    app = models.ForeignKey(AppUser,on_delete=models.CASCADE,null=True,verbose_name=u'APP端')
+    dev = models.ForeignKey(Devices,null=True,
+                                    on_delete=models.CASCADE,verbose_name = u'设备端') 
     clientid = models.CharField(max_length=100,null=True,verbose_name=u'客户端ID')
-    access = models.IntegerField(verbose_name=u"访问级别")
+    access = models.IntegerField(choices=ACL_CHOICES,verbose_name=u"访问级别")
+#     topic = models.ForeignKey(MqttTopics,on_delete=models.CASCADE,verbose_name=u"主题")
+    
     topic = models.CharField(max_length=100,verbose_name=u'主题')
     
     def __unicode__(self):
-        return self.username
+        return str(self.app_id) or str(self.dev_id)
     
+
     
     
 class MqttUser(models.Model):

@@ -197,7 +197,7 @@ class IotAuthTestCase(TestCase):
         ######### test device name ###################
         ##url(r'^iot/app/chamgedev/(?P<token>\w+)/(?P<target>\w+)/(?P<newname>\w+)/$',ChangeDevName),
         print "----------------- test change device name ---------------------------"
-        url = '/iot/app/changedev/%s/%s/' % (self.signid,"test123")
+        url = '/iot/dev/changedev/%s/%s/' % (self.signid,"test123")
         request = self.factory.get(url)
         response = ChangeDevName(request,self.signid,"test1234")
         d = json.loads(response.content)

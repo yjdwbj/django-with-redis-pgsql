@@ -32,6 +32,8 @@ SESSION_COOKIE_AGE = 600
 
 SECURE_HSTS_SECONDS = 315600
 
+PBKDF2_ITERATIONS = 1024 
+
 
 CACHES = {
     "default": {
@@ -112,6 +114,7 @@ SESSION_CACHE_ALIAS = "default"
 # }
 
 PASSWORD_HASER=[
+        "MyPBKDF2PasswordHasher",
         "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
         "django.contrib.auth.hashers.SHA1PasswordHasher",
     ]
@@ -127,7 +130,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 #     'bootstrap3',
-    'gunicorn',
+#     'gunicorn',
     'user_manager',
 ]
 
@@ -177,7 +180,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql_psycopg2',
         'NAME' : 'mqtt',
         'USER' :'mqtt',
-        'PASSWORD':'mqtt',
+        'PASSWORD':'mqtt123',
         'HOST' : '192.168.25.100',
         'PORT' : '5433',
 #         'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),

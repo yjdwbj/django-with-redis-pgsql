@@ -23,7 +23,7 @@ from django.db import IntegrityError
 
 
 from django.core.cache import cache as redis_pool
-from django.conf import settings
+
 
 from django_redis import get_redis_connection
 redis_pool = get_redis_connection("default")
@@ -41,60 +41,87 @@ from models import *
 from django.core.files import File
 from django.db.models.query import Q
 from uuid import UUID
+import mimetypes
+
+import magic
+from django.db import connection, transaction
 
 
 
-from django.contrib.auth.hashers import make_password, check_password
 
 
 
-UnkownSignMethod = json.dumps({"errorCode":"UnkownSignMethod",
-                "message":u"未知签名方法", "success":False}, ensure_ascii=False)
-SignError = json.dumps({"errorCode":"SignError", "message":u"签名错误", "success":False}, ensure_ascii=False)
-DataMiss = json.dumps({"errorCode":"DataMiss", "message":u"信息不完整", "success":False}, ensure_ascii=False)
-UserNotExists = json.dumps({"errorCode": "UserNotExists", "message":u"用户不存在", "success":False}, ensure_ascii=False)
-UnAuth = json.dumps({"errorCode": "UnAuth", "message":u"无权访问", "success":False}, ensure_ascii=False)
-TargetNotExists = json.dumps({"errorCode": "TargetNotExists", "message":u"目标不存在", "success":False}, ensure_ascii=False)
-TargetIsSelf = json.dumps({"errorCode": "TargetIsSelf", "message":u"目标不能是自已", "success":False}, ensure_ascii=False)
-UnkownAction = json.dumps({"errorCode":"UnkownAction", "message":u"未识别的操作", "success":False}, ensure_ascii=False)
-BindError = json.dumps({"errorCode":"BindError", "message":u"已经绑定", "success":False}, ensure_ascii=False)
-BindPWDError = json.dumps({"errorCode":"BindError", "message":u"无权绑定", "success":False}, ensure_ascii=False)
-UserError = json.dumps({"errorCode":"UserError", "message":u"用户名已存在", "success":False}, ensure_ascii=False)
-EmailError = json.dumps({"errorCode":"EmailError", "message":u"邮箱已存在", "success":False}, ensure_ascii=False)
-PhoneError = json.dumps({"errorCode":"PhoneError", "message":u"手机号已存在", "success":False}, ensure_ascii=False)
-PwdError = json.dumps({"errorCode":"PwdError", "message":u"密码错误", "success":False}, ensure_ascii=False)
-ArgError = json.dumps({"errorCode":"ArgError", "message":u"参数错误", "success":False}, ensure_ascii=False)
-CaptchaError = json.dumps({"errorCode":"CaptchaError", "message":u"验证码错误", "success":False}, ensure_ascii=False)
-IpAddrError = json.dumps({"errorCode":"IpAddrError", "message":u"IP错误", "success":False}, ensure_ascii=False)
-InternalError = json.dumps({"errorCode":"InternalError", "message":u"服务器内部错误", "success":False}, ensure_ascii=False)
-SmsOverError = json.dumps({"errorCode":"SmsOverError", "message":u"该手机号已经超过发送次数", "success":False}, ensure_ascii=False)
-SmsIntervalError = json.dumps({"errorCode":"SmsIntervalError", "message":u"发送间隔太短", "success":False}, ensure_ascii=False)
-OtherError = json.dumps({"errorCode":"OtherError", "message":u"发送间隔太短", "success":False}, ensure_ascii=False)
-PhoneInactive = json.dumps({"errorCode":"PhoneInactive", "message":u"该手机号没有验证激活", "success":False}, ensure_ascii=False)
-FormatError = json.dumps({"errorCode":"FormatError", "message":u"格式错误", "success":False}, ensure_ascii=False)
-DevActError = json.dumps({"errorCode":"DevActError", "message":u"设备未出厂", "success":False}, ensure_ascii=False)
-DupActError = json.dumps({"errorCode":"DupActError", "message":u"设备已经激活", "success":False}, ensure_ascii=False)
+
+from django.contrib.auth.hashers import check_password
+
+
+
+UnkownSignMethod = json.dumps({"err":"UnkownSignMethod",
+                "msg":u"未知签名方法", "ok":False}, ensure_ascii=False)
+SignError = json.dumps({"err":"SignError", "msg":u"签名错误", "ok":False}, ensure_ascii=False)
+DataMiss = json.dumps({"err":"DataMiss", "msg":u"信息不完整", "ok":False}, ensure_ascii=False)
+UserNotExists = json.dumps({"err": "UserNotExists", "msg":u"用户不存在", "ok":False}, ensure_ascii=False)
+UnAuth = json.dumps({"err": "UnAuth", "msg":u"无权访问", "ok":False}, ensure_ascii=False)
+TargetNotExists = json.dumps({"err": "TargetNotExists", "msg":u"目标不存在", "ok":False}, ensure_ascii=False)
+TargetIsSelf = json.dumps({"err": "TargetIsSelf", "msg":u"目标不能是自已", "ok":False}, ensure_ascii=False)
+UnkownAction = json.dumps({"err":"UnkownAction", "msg":u"未识别的操作", "ok":False}, ensure_ascii=False)
+BindError = json.dumps({"err":"BindError", "msg":u"已经绑定", "ok":False}, ensure_ascii=False)
+BindPWDError = json.dumps({"err":"BindError", "msg":u"无权绑定", "ok":False}, ensure_ascii=False)
+UserError = json.dumps({"err":"UserError", "msg":u"用户名已存在", "ok":False}, ensure_ascii=False)
+EmailError = json.dumps({"err":"EmailError", "msg":u"邮箱已存在", "ok":False}, ensure_ascii=False)
+PhoneError = json.dumps({"err":"PhoneError", "msg":u"手机号已存在", "ok":False}, ensure_ascii=False)
+PwdError = json.dumps({"err":"PwdError", "msg":u"用户或者密码错误", "ok":False}, ensure_ascii=False)
+ArgError = json.dumps({"err":"ArgError", "msg":u"参数错误", "ok":False}, ensure_ascii=False)
+CaptchaError = json.dumps({"err":"CaptchaError", "msg":u"验证码错误", "ok":False}, ensure_ascii=False)
+IpAddrError = json.dumps({"err":"IpAddrError", "msg":u"IP错误", "ok":False}, ensure_ascii=False)
+InternalError = json.dumps({"err":"InternalError", "msg":u"服务器内部错误", "ok":False}, ensure_ascii=False)
+SmsOverError = json.dumps({"err":"SmsOverError", "msg":u"该手机号已经超过发送次数", "ok":False}, ensure_ascii=False)
+SmsIntervalError = json.dumps({"err":"SmsIntervalError", "msg":u"发送间隔太短", "ok":False}, ensure_ascii=False)
+OtherError = json.dumps({"err":"OtherError", "msg":u"发送间隔太短", "ok":False}, ensure_ascii=False)
+PhoneInactive = json.dumps({"err":"PhoneInactive", "msg":u"该手机号没有验证激活", "ok":False}, ensure_ascii=False)
+FormatError = json.dumps({"err":"FormatError", "msg":u"格式错误", "ok":False}, ensure_ascii=False)
+DevActError = json.dumps({"err":"DevActError", "msg":u"设备未出厂", "ok":False}, ensure_ascii=False)
+DupActError = json.dumps({"err":"DupActError", "msg":u"设备已经激活", "ok":False}, ensure_ascii=False)
+SizeError = json.dumps({"err":"SizeError", "msg":u"文件内容超大", "ok":False}, ensure_ascii=False)
+ShareError = json.dumps({"err":"ShareError", "msg":u"无权分享该主题", "ok":False}, ensure_ascii=False)
 
 
 JsonType = 'application/json; charset=utf-8'
 
-supportAlg = {'HmacMD5':hashlib.md5, 'HmacSHA1':hashlib.sha1, 'MD5':None}
-
-num = 0.0
-alltime = 0.0
-mintime  = 0.0
-maxtime  = 0.0
-
-
 
 # Create your views here.
 
+def HttpReturn(ret,ctx = JsonType):
+    return HttpResponse(ret,content_type=ctx)
 
 
 def get_verify_code(request):
     txt, img = captcha.get_code()
     request.session[request.COOKIES.get('csrftoken')] = txt
+#     data = AppUser.objects.all()[0].avatar
+#     return HttpResponse(base64.b64decode(data), content_type='image/png')
     return HttpResponse(img.decode('base64'), content_type='image/png')
+
+def QueryCert(request,token,ipaddr):
+    if not redis_pool.hget(token, 'uuid'):
+        return HttpReturn(UnAuth)
+        
+    # ## 更新登录状态时间
+    redis_pool.expire(token, settings.SESSION_COOKIE_AGE)
+
+    retdict = {}
+    retdict["ok"]  = True     
+    try:
+        srv = SrvList.objects.get(ipaddr=ipaddr)   
+    except (ObjectDoesNotExist, IndexError) as e:
+        retdict['cert'] = None
+    else:
+        import zlib
+        retdict['cert'] =base64.b64encode(zlib.compress(base64.b64decode(srv.pubkey),9))
+    
+    return HttpReturn(json.dumps(retdict))
+        
+    
 
 def PreCheckRequest(request, obj, data):   
 #     print len(data),data;
@@ -102,7 +129,7 @@ def PreCheckRequest(request, obj, data):
     rawpwd = data.get('key', '')
 #     print "request key", rawpwd
     if not check_password(rawpwd, obj.key):
-        return HttpResponse(UnAuth, content_type=JsonType)
+        return HttpReturn(UnAuth)
     
 #     srvobj = SrvList.objects.annotate(max_mark=Min('concount')).filter(concount=F('max_mark'))
     # ##选取最小的连接数的服务器
@@ -116,22 +143,24 @@ def PreCheckRequest(request, obj, data):
         retdict['mqttver'] = None
     else:
         srvobj = SrvList.objects.get(ipaddr=srvipaddr[0])
-        resflag = data.get('resFlag', 'all')
-        if not cmp(resflag, 'ip'):
-            retdict['servers'] = ':'.join([srvobj.ipaddr, str(srvobj.port)])  
-        elif not cmp(resflag, 'cert'):
-            retdict['pubkey'] = base64.b64encode(srvobj.pubkey)
-        else:
-            retdict['servers'] = ':'.join([srvobj.ipaddr, str(srvobj.port)])
-            retdict['pubkey'] = base64.b64encode(srvobj.pubkey) 
+        ### 这里新的不再返回服务器的证
+#         resflag = data.get('resFlag', 'all')
+#         if not cmp(resflag, 'ip'):
+#             retdict['servers'] = ':'.join([srvobj.ipaddr, str(srvobj.port)])  
+#         elif not cmp(resflag, 'cert'):
+#             retdict['pubkey'] = base64.b64encode(srvobj.pubkey)
+#         else:
+#             retdict['servers'] = ':'.join([srvobj.ipaddr, str(srvobj.port)])
+#             retdict['pubkey'] = base64.b64encode(srvobj.pubkey) 
         retdict['mqttver'] = srvobj.mver
+        retdict['servers'] = ':'.join([srvobj.ipaddr, str(srvobj.port)])
     retdict['time'] = str(int(time.time()))
     retdict['expire'] = settings.SESSION_COOKIE_AGE
 
     hasher, iterations, salt, code = obj.key.split('$')
 
     retdict['sign'] = hmac.new(str(salt), str(time.time())).hexdigest().upper()
-    retdict['success'] = True
+    retdict['ok'] = True
     hkey = retdict['sign']
     
     
@@ -310,7 +339,7 @@ def IotAppRegister(request):
     redis_pool.hset(sendsms_code, 'phone', phone)
     redis_pool.hset(sendsms_code, 'ipaddr', ipaddr)
     redis_pool.expire(sendsms_code, settings.SESSION_COOKIE_AGE)
-    return HttpResponse(json.dumps({"success":True, "uuid":nuuid, 'smscode':sendsms_code}))
+    return HttpResponse(json.dumps({"ok":True, "uuid":nuuid, 'smscode':sendsms_code}))
    
 
 
@@ -352,10 +381,9 @@ def AppRegister(request):
 
 def IotPing(request,token):
     if not redis_pool.hget(token, 'uuid'):
-        return HttpResponse(UnAuth, content_type=JsonType)
-    else:
-        redis_pool.expire(token, settings.SESSION_COOKIE_AGE)
-        return HttpResponse(json.dumps({'success':True}),
+        return HttpReturn(UnAuth)
+    redis_pool.expire(token, settings.SESSION_COOKIE_AGE)
+    return HttpResponse(json.dumps({'ok':True}),
                             content_type=JsonType)
         
 def GetRequestBody(request):
@@ -369,7 +397,7 @@ def GetRequestBody(request):
     else:
         return None
 
-    
+@transaction.atomic
 def CheckBindDev(request, key, dev_uuid, user):
 #     print "check bind dev ",key,dev_uuid,user
 #     print "dev_uuid key ", dev_uuid.key
@@ -387,23 +415,61 @@ def CheckBindDev(request, key, dev_uuid, user):
     try:
         AppBindDevList.objects.get(devid=dev_uuid)
     except (ObjectDoesNotExist,ValueError) as e :
+        topic,ok =  MqttTopics.objects.get_or_create(topic="/%s/#" % devuidhex)
+        MqttAcl.objects.get_or_create(allow=1, ipaddr=None, clientid=None,
+                                         app =user,
+                                        access=3, topic="/%s/#" % devuidhex)
+        MqttAcl.objects.get_or_create(allow=1, ipaddr=None, clientid=None,
+                                         dev_id =devuidhex,
+                                      access=3, topic="/%s/#" % devuidhex)
         
         
-        MqttAcl.objects.get_or_create(allow=1, ipaddr=None, clientid=None, username=user.uuid.hex,
-                               access=3, topic="/%s/#" % devuidhex)
-        MqttAcl.objects.get_or_create(allow=1, ipaddr=None, clientid=None, username=user.uuid.hex,
-                               access=3, topic="/%s/#" % user.uuid.hex)
-        MqttAcl.objects.get_or_create(allow=1, ipaddr=None, clientid=None, username=devuidhex,
-                                     access=3, topic="/%s/#" % user.uuid.hex)
-        MqttAcl.objects.get_or_create(allow=1, ipaddr=None, clientid=None, username=devuidhex,
-                                     access=3, topic="/%s/#" % devuidhex)
+        topic,ok =  MqttTopics.objects.get_or_create(topic="/%s/#" % user.uuid.hex)
+#         MqttAcl.objects.get_or_create(allow=1, ipaddr=None, clientid=None,
+#                                          app =user.uuid.hex,
+#                                          access=3, topic=topic)
+        MqttAcl.objects.get_or_create(allow=1, ipaddr=None, clientid=None, 
+                                         dev_id =devuidhex,
+                                         access=3, topic="/%s/#" % user.uuid.hex)
+        
         AppBindDevList.objects.create(appid=user, devid=dev_uuid)
         
-        return HttpResponse(json.dumps({"success":True}), content_type=JsonType)
+#         MqttAcl.objects.get_or_create(allow=1, ipaddr=None, clientid=None, username=user.uuid.hex,
+#                                access=3, topic="/%s/#" % devuidhex)
+#         MqttAcl.objects.get_or_create(allow=1, ipaddr=None, clientid=None, username=user.uuid.hex,
+#                                access=3, topic="/%s/#" % user.uuid.hex)
+#         MqttAcl.objects.get_or_create(allow=1, ipaddr=None, clientid=None, username=devuidhex,
+#                                      access=3, topic="/%s/#" % user.uuid.hex)
+#         MqttAcl.objects.get_or_create(allow=1, ipaddr=None, clientid=None, username=devuidhex,
+#                                      access=3, topic="/%s/#" % devuidhex)
+#         AppBindDevList.objects.create(appid=user, devid=dev_uuid)
+        
+        return HttpResponse(json.dumps({"ok":True}), content_type=JsonType)
     else:
         return HttpResponse(BindError, content_type=JsonType)  # 已经绑定了
 
-@csrf_exempt
+
+def AppCheckBindDev(request,user,uuid):
+    body = GetRequestBody(request)
+    if not body:
+        return HttpResponse(ArgError, content_type=JsonType)
+    dev_key = body.get('dkey', '')
+    try:
+        dev_uuid = Devices.objects.get(uuid=uuid)
+    except (ObjectDoesNotExist, ValueError) as e:
+        return HttpResponse(json.dumps({"ok":True, "bound": False}),
+                            content_type=JsonType)
+    if not check_password(dev_key, dev_uuid.key):
+        return HttpResponse(PwdError, content_type=JsonType)
+    bound = True
+    try:
+        AppBindDevList.objects.get(devid=dev_uuid)
+    except (ObjectDoesNotExist, ValueError) as e:
+        bound = False
+    return HttpResponse(json.dumps({"ok":True, "bound": bound}),
+                        content_type=JsonType)
+
+@transaction.atomic
 def AppBindDev(request, user, uuid):
    
 #     print "request POST",request.POST
@@ -447,7 +513,7 @@ def AppBindDev(request, user, uuid):
         return CheckBindDev(request, body.get('dkey', ''), dev_uuid, user)
 
     
-
+@transaction.atomic
 def AppDropDev(request, user, target):
 #     print "request POST",request.POST
 #     for (k,v) in request.__dict__.items():
@@ -465,18 +531,22 @@ def AppDropDev(request, user, target):
     else:
         # 删除绑定,同时删除ＡＣＬ,这里对于数据库要用到事务.
         try:                    
-            MqttAcl.objects.filter(username=user.uuid.hex, topic="/%s/#" % target).delete()    
+#             MqttAcl.objects.filter(username=user.uuid.hex, topic="/%s/#" % target).delete()
+#             MqttAcl.objects.filter(app=user.uuid.hex, topic="/%s/#" % target).delete()   
+            MqttAcl.objects.filter(app=user.uuid.hex, topic__iexact="/%s/#" % target).delete()
         except :
             pass
+        
         try:                    
-            MqttAcl.objects.filter(username=target, topic='/%s/#' % user.uuid.hex).delete()    
+#             MqttAcl.objects.filter(username=target, topic='/%s/#' % user.uuid.hex).delete()
+            MqttAcl.objects.filter(dev=target, topic='/%s/#' % user.uuid.hex).delete()    
         except :
             pass
         try:
             AppBindDevList.objects.get(appid=user, devid=dev_uuid).delete()
         except :
             pass
-        return HttpResponse(json.dumps({"success":True}), content_type=JsonType)     
+        return HttpResponse(json.dumps({"ok":True}), content_type=JsonType)     
     
 
 
@@ -516,61 +586,88 @@ def IotDevActive(request,account,pwd):
                                    regip=ipobj,
                                    regtime=timezone.now())
             
-            return HttpResponse(json.dumps({"success":True}),
-                            content_type=JsonType) 
+            return HttpReturn(json.dumps({"ok":True}))
             
     
 
-
+@transaction.atomic
 def AcceptBindLink(request, user, uuid):
 #     print "accept user %s to bind uuid %s" % (user.uuid.hex, uuid)
-    try:
-        devlink = ShareLink.objects.get(otpuuid=uuid)
-    except (ObjectDoesNotExist,ValueError) as e:
-        return HttpResponse(TargetNotExists,
-                            content_type=JsonType)
-    else:
-        
-        res = {'dev': {'name': devlink.sharedev.name,
-                          'mac': devlink.sharedev.mac,
-                          'uuid': devlink.sharedev.uuid.hex},
-                   'data':devlink.bodydata}
-        
-        devlink.delete()  # ## 被人接受分享了进行删除.
-        
-        return HttpResponse(json.dumps({'success':True, 'data':res}),
-                            content_type=JsonType)
-#         return JsonResponse({'success':True,'data':res},safe = False)
+    shared_keys = redis_pool.hgetall(uuid)
+    print "shared_keys",shared_keys,"type",type(shared_keys)
+   
+    if not shared_keys:
+        return HttpReturn(UnAuth)
     
+    if user.uuid.hex == shared_keys['appid']:
+        return HttpReturn(UnAuth)
+        
+        
+    print "shared redis key",shared_keys
+    
+    topic,ok =  MqttTopics.objects.get_or_create(topic="/%s/#" % user.uuid.hex)
+    
+    SharedDevList.objects.get_or_create(host_id = shared_keys['appid'],
+                                        guest = user,
+                                        sdevice_id = shared_keys['devid'],
+                                        topics = shared_keys['topics'])
+    
+    tdict = json.loads(shared_keys['topics'])
+    print "topic dict is ",tdict
+    for item in tdict['topics'] :
+#         topic,ok =  MqttTopics.objects.get_or_create(topic=item)
+        MqttAcl.objects.get_or_create(allow=1, ipaddr=None, clientid=None,
+                                         app = user,
+                                         access=3, topic="/%s/%s/#" % (shared_keys['devid'],item))
+    
+    ### 记录分享者,接受者,设备uuid,主题
+    redis_pool.expire(uuid,1)
+#     for k,v in shared_keys.items():
+#         redis_pool.hdel(uuid,key)
+    return HttpReturn(json.dumps({'ok':True, 'data':shared_keys}))
+#         return JsonResponse({'ok':True,'data':res},safe = False)
+    
+def AppDelShareDev(request,user):
+    pass
 
 def AppShareDev(request, user, devuuid):
-#     print "request body",request.body
-#     print "body type",type(request.body)
+
+    body = GetRequestBody(request)
+    
     try:
-        dev_uuid = Devices.objects.get(uuid=devuuid)
-    except (ObjectDoesNotExist,ValueError) as e:
+#         results = AppBindDevList.objects.raw("SELECT devid_id from bindlist WHERE appid_id = %s AND devid_id=%s",
+#                                          [user.uuid.hex,devuuid])
+        results = AppBindDevList.objects.filter(devid_id = devuuid,appid = user)[0]
+    except (ObjectDoesNotExist,IndexError) as e:
         return HttpResponse(TargetNotExists,
-                            content_type=JsonType)
+                             content_type=JsonType)
+    print "result id ",results
+    if results.devid.uuid.hex != devuuid:
+        return HttpResponse(TargetNotExists,
+                             content_type=JsonType)
+
     otpuuid = uuid.uuid4().hex
     if not request.body:
-        return HttpResponse(ArgError, content_type=JsonType)
-    try:    
-        body = json.loads(request.body.decode('utf-8'))
-    except ValueError:
-        return HttpResponse(ArgError, content_type=JsonType)
-#     jdata = request.body.decode('utf-8')
-    ret = ShareLink.objects.create(sharer=user,
-                                   sharedev=dev_uuid,
-                                   otpuuid=otpuuid,
-                                   bodydata=body)
+        return HttpReturn(ArgError)
+    topics = json.loads(request.body).get('topics',None)
+    ## 检查topics 是否为空,是否是为列表类型,是否全部为真.
+    if not topics or  not isinstance(topics,list):
+        return HttpReturn(ArgError)
     
-    
+#     if not  all(devuuid in item for item in topics):
+#         return HttpReturn(ShareError)
+        
 #         full_url = ''.join(['http://', get_current_site(request).domain, 
 #                             '/shared/%s' % otpuuid])
-    res = {'success':True, 'otp':otpuuid}
+    expire = settings.SESSION_COOKIE_AGE * 6
+    res = {'ok':True, 'otp':otpuuid,'expire':expire}
+    redis_pool.hset(otpuuid,"appid",user.uuid.hex)
+    redis_pool.hset(otpuuid,"devid",devuuid)
+    redis_pool.hset(otpuuid,"topics",request.body)
+    redis_pool.expire(otpuuid,expire)
+    
 #         return JsonResponse(res,safe=False) 
-    return HttpResponse(json.dumps(res),
-                        content_type=JsonType)
+    return HttpReturn(json.dumps(res))
         
                 
 
@@ -586,7 +683,7 @@ def AppAddFriend(request, user, uuid):
                             content_type=JsonType)
             
         AppFriendList.objects.get_or_create(my_uuid=user, friend=friend)
-        return HttpResponse(json.dumps({"success":True}),
+        return HttpResponse(json.dumps({"ok":True}),
                             content_type=JsonType)
 
 
@@ -598,7 +695,7 @@ def AppRemoveFriend(request, user, uuid):
         return HttpResponse(TargetNotExists,
                             content_type=JsonType)
     else:
-        return HttpResponse(json.dumps({"success":True}),
+        return HttpResponse(json.dumps({"ok":True}),
                             content_type=JsonType)
     
 
@@ -609,7 +706,7 @@ def AppUploadProfile(request, user):
 def AppDownloadProfile(request, user):
     pass    
 
-
+@transaction.atomic
 def AppVerifyPhone(request, Md5sum, smscode):
     phone = redis_pool.hget(Md5sum, 'phone')
     mysms = redis_pool.hget(Md5sum, 'sms')
@@ -625,35 +722,47 @@ def AppVerifyPhone(request, Md5sum, smscode):
     
     
     adict = redis_pool.hgetall(Md5sum)
-#     print "verify phone adict is", adict
+    print "verify phone adict is", adict
     
-    ipobj, ok = IpAddress.objects.get_or_create(ipaddr=redis_pool.hget(Md5sum,'ipaddr'))
-    try:
-        AppUser.objects.create(email =redis_pool.hget(Md5sum,'email'),
-                               phone = redis_pool.hget(Md5sum,'phone'),
-                               key = make_password(redis_pool.hget(Md5sum,'key')),
-                               uname = redis_pool.hget(Md5sum,'uname'),
+    ipobj, ok = IpAddress.objects.get_or_create(ipaddr=request.META.get('REMOTE_ADDR'))
+    # 注册成功之后,添加注册记录,并添加一条 /uuid/# 的记录到mqtt_acl
+    if 'register' in adict:
+        AppUser.objects.create(email =adict['email'],
+                               phone = adict['phone'],
+                               key = make_password(adict['key']),
+                               uname = adict['uname'],
+                               uuid = adict['uuid'],
                                regtime = timezone.now(),
                                regip = ipobj,
                                phone_active = True,
                                data = {'null':'null'})
-    except:
-        pass
-
+        
+      
+        topic,ok =  MqttTopics.objects.get_or_create(topic="/%s/#" % adict['uuid'])
+        MqttAcl.objects.get_or_create(allow=1, ipaddr=None, clientid=None,
+                                             app_id =adict['uuid'],
+                                             access=3, topic=topic)
+    else:
+        obj = AppUser.objects.get(phone = adict['phone'])
+        obj.phone_active = True
+        obj.save()
+    
     #### 已经验证了,清除内存
     for (k,v) in adict.items():
         redis_pool.hdel(Md5sum,k)
     
-    return HttpResponse(json.dumps({"success":True}),
+    return HttpResponse(json.dumps({"ok":True}),
                             content_type=JsonType)
 
 
 actionFunc = {'bind':AppBindDev,
+              'checkbind':AppCheckBindDev,
               'unbind':AppDropDev,
               'add':AppAddFriend,
               'del':AppRemoveFriend,
               'reqshare':AcceptBindLink,
-              'sharedev':AppShareDev}
+              'sharedev':AppShareDev,
+              'delshare':AppDelShareDev}
 
 
 def AppAction(request, token, target, action):
@@ -672,7 +781,37 @@ def AppAction(request, token, target, action):
     else:
         return HttpResponse(UnkownAction,
                             content_type=JsonType)
+
+def AppSetAvatar(request,user):
+#     print "request is",request.__dict__  
     
+    datalen = len(request.body)
+   
+    btype = magic.Magic().id_buffer(request.body)
+    print "data len: ",datalen,"type is",btype
+    if not any(ext in btype for ext in ['JPEG','PNG','GIF']):
+        return HttpResponse(FormatError,
+                            content_type=JsonType)
+    if datalen > 102410:
+        return HttpResponse(SizeError,
+                            content_type=JsonType)
+#     user.avator = request.body
+  
+    cursor = connection.cursor()
+    print "user.uuid",user.uuid.hex
+
+    cursor.execute('UPDATE user_manager_appuser set avatar = %s where uuid = %s',
+                              [base64.b64encode(request.body),str(user.uuid.hex)])
+
+
+#     transaction.set_dirty()        
+    transaction.commit()
+    return HttpResponse(json.dumps({"ok":True}),
+                            content_type=JsonType) 
+
+def AppGetAvatar(request,user):
+    return HttpResponse(base64.b64decode(user.avatar),content_type=user.get_mimetype)        
+
 
 def AppUserChange(request, user):
     body = GetRequestBody(request)
@@ -686,44 +825,23 @@ def AppUserChange(request, user):
         return HttpResponse(PwdError,
                             content_type=JsonType)
     newpass = body.get('newpass', None)
-#         npass2 = body.get('npass2',None)
+#
     
-    uname = body.get('username', None)
-    phone = body.get('phone', None)
-    email = body.get('email', None)
-    if uname:
-        try:
-            tmp = AppUser.objects.get(uname=uname)
-        except :
-            user.uname = uname
-        else:
-            return HttpResponse(UserError,
-                                content_type=JsonType)
-    if phone:
-#         print "change phone is",phone
-        try:
-            tmp = AppUser.objects.get(phone=phone)    
-        except :
-            user.phone = phone
-        else:
-#             print "return phone ",tmp.__dict__
-            return HttpResponse(PhoneError,
-                                content_type=JsonType)
-    if email:
-        try:
-            tmp = AppUser.objects.get(email=email)
-        except :
-            user.email = email
-        else:
-            return HttpResponse(EmailError,
-                                content_type=JsonType)
-    
+    for k,v in body.items():
+        
+        if k in ['email','nickname','phone','sex']:
+            print k, " set value ",type(v)
+            setattr(user,k,v)
+        if k == 'phone':  ### 更改了手机要重新激活帐号
+            setattr(user,"phone_active",False)
     
     if newpass:
+        print "set newpass ",newpass
         user.key = make_password(newpass)
+    
     user.save()
     
-    return HttpResponse(json.dumps({"success":True}),
+    return HttpResponse(json.dumps({"ok":True}),
                             content_type=JsonType)
 
 
@@ -741,7 +859,7 @@ def ChangeDevName(request,token,newname):
     else:
         devobj.name = newname
         devobj.save()
-        return HttpResponse(json.dumps({"success":True}),
+        return HttpResponse(json.dumps({"ok":True}),
                         content_type=JsonType)
     
         
@@ -751,16 +869,23 @@ def AppQueryApp(request, user):
     applist = AppFriendList.objects.filter(my_uuid=user) 
     
     results = [ob.as_json() for ob in AppUser.objects.filter(friend_user__in=applist)]
-    return HttpResponse(json.dumps({"list":results, "success":True}), content_type=JsonType)
+    return HttpResponse(json.dumps({"list":results, "ok":True}), content_type=JsonType)
 
 def AppQueryDev(request, user):
     devlist = AppBindDevList.objects.filter(appid=user)
     lst = [x.devid.uuid.hex for x in devlist]
     l = Devices.objects.filter(pk__in=lst)
     results = [ ob.as_json() for ob in l]
-    return HttpResponse(json.dumps({"list":results ,
-                                    "success":True}),
-                        content_type=JsonType)   
+    return HttpReturn(json.dumps({"list":results ,
+                                    "ok":True}))
+    
+ 
+def AppRsyncData(request,user):
+    return HttpReturn(json.dumps({"ok":True,
+                                    "data":user.data}))
+    
+def AppGetInfo(request,user):
+    return HttpReturn(json.dumps({"ok":True,"info":user.as_json()}))
     
  
 def AppSyncData(request, user):
@@ -770,7 +895,7 @@ def AppSyncData(request, user):
 #     print "-----------------------sync body is",body,type(user)
     user.data = body
     user.save()
-    return HttpResponse(json.dumps({"success":True}),
+    return HttpResponse(json.dumps({"ok":True}),
                             content_type=JsonType)
  
 
@@ -783,7 +908,6 @@ def AppSendSms(request, account):
     if 'phone' not in adict:
         return HttpResponse(UnAuth, content_type=JsonType)
         
-
 #     redis_pool.hdel(account, 'phone')
 #     print "phone number ", phone 
     
@@ -798,20 +922,11 @@ def AppSendSms(request, account):
     if sendtime and (time.time() - int(sendtime)) < settings.SESSION_COOKIE_AGE / 10:
         return HttpResponse(SmsIntervalError, content_type=JsonType)
         
-        
-    
 #     ipaddr = request.META.get('REMOTE_ADDR')
     ipobj, ok = IpAddress.objects.get_or_create(ipaddr=request.META.get('REMOTE_ADDR'))
     oldaddr = redis_pool.hget(account, 'ipaddr')
     if cmp(ipobj.ipaddr, oldaddr):
         return HttpResponse(IpAddrError, content_type=JsonType)
-    
-    
-#     smsmsg = ''.join([random.SystemRandom(time.time()).choice('0123456789') for x in xrange(5)])
-    
-#     redis_pool.hset(account,'smscode',smsmsg)
-#     redis_pool.hset(phone,'smscode',smsmsg)
-#     redis_pool.expire(phone,settings.SESSION_COOKIE_AGE )
     
     try:
         (sms, state) = sendsms.SendSMS(adict['phone'])
@@ -833,32 +948,37 @@ def AppSendSms(request, account):
             for (k,v) in adict.items():
                 redis_pool.hset(resetcode,k,v)
         
-#         redis_pool.hset(resetcode, 'phone', phone)
+        redis_pool.hset(resetcode, 'phone', adict['phone'])
         redis_pool.hset(resetcode, 'sms', sms)
-        print "reset code dict is",redis_pool.hgetall(resetcode)
+#         print "reset code dict is",redis_pool.hgetall(resetcode)
         redis_pool.expire(resetcode, settings.SESSION_COOKIE_AGE)
-        return HttpResponse(json.dumps({"success":True, 'rescode':resetcode}))
+        redis_pool.hdel(account, 'phone') ## 删除这个键,一次有效
+        return HttpResponse(json.dumps({"ok":True, 'rescode':resetcode}))
     else:
         if state in ErrDict:
             errobj = SmsErrorTable.objects.get(errcode=state)
             SmsErrorLog.objects.create(errcode=errobj, ipaddr=ipobj,
                                        addtime=timezone.now(), phone=adict['phone'])
         if state == 10006 or state == 10007 or state == 10005:
-            return HttpResponse(json.dumps({"errorCode":"OtherError", "message":ErrDict[state],
-                                            "success":False}, ensure_ascii=False))
+            return HttpReturn(json.dumps({"err":"OtherError", "msg":ErrDict[state]}))
         else:
-            return HttpResponse(InternalError, content_type=JsonType)
+            return HttpReturn(InternalError)
     
 
     
 QueryFunc = {'querydev':AppQueryDev,
              'queryapp':AppQueryApp,
              'sync':AppSyncData,
+             'rsync':AppRsyncData,
+             'getinfo':AppGetInfo,
              'change':AppUserChange,
+             'setavatar':AppSetAvatar,
+             'getavatar':AppGetAvatar,
              'sendsms':AppSendSms}    
  
  
 def AppResetPwd(request, Md5sum, newpass, smscode):
+    
     phone = redis_pool.hget(Md5sum, 'phone')
     mysms = redis_pool.hget(Md5sum, 'sms')
     
@@ -881,7 +1001,7 @@ def AppResetPwd(request, Md5sum, newpass, smscode):
     except:
         pass
     
-    return HttpResponse(json.dumps({"success":True}),
+    return HttpResponse(json.dumps({"ok":True}),
                             content_type=JsonType)
     
 def AppFindPwd(request, account, captcha):
@@ -918,7 +1038,7 @@ def AppFindPwd(request, account, captcha):
         res = {'name': accobj.uname,
                               'phone': "%s****%s" % (accobj.phone[:3], accobj.phone[-4:]),
                               'smscode': smscode,
-                              'success':True}
+                              'ok':True}
         return HttpResponse(json.dumps(res), content_type=JsonType)
     
         
@@ -944,7 +1064,7 @@ def AppQuery(request, token, action):
         redis_pool.expire(token, 1)
         redis_pool.hdel(token, 'ipaddr')
         redis_pool.hdel(token, 'uuid')
-        return HttpResponse(json.dumps({"success":True}),
+        return HttpResponse(json.dumps({"ok":True}),
                                 content_type=JsonType)
     
     user = AppUser.objects.get(uuid=redis_pool.hget(token, 'uuid'))

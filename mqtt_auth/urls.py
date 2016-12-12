@@ -30,21 +30,16 @@ urlpatterns = [
     url(r'^iot/app/findpwd/(?P<account>\w+)/(?P<captcha>\d{6})/$',AppFindPwd),
     url(r'^iot/app/active/(?P<Md5sum>\w+)/(?P<smscode>\w+)/$',AppVerifyPhone),
     url(r'^iot/app/opt/(?P<token>\w+)/(?P<target>\w+)/(?P<action>\w+)/$',AppAction),
-    
     url(r'^iot/app/resetpwd/(?P<Md5sum>[A-F0-9]{32})/(?P<newpass>\w+)/(?P<smscode>\d{5})/$',AppResetPwd),
     url(r'^iot/app/sendsms/(?P<account>[A-F0-9]{32})/$',AppSendSms),
     url(r'^iot/app/(?P<token>\w+)/(?P<action>\w+)/$',AppQuery),
-    
+    url(r'^iot/dev/changedev/(?P<token>\w+)/(?P<newname>\w+)/$',ChangeDevName),
     url(r'^iot/app/auth/$',IotAppAuth),
     url(r'^iot/app/register/$',IotAppRegister),
-    
-#     url(r'^iot/app/add/',AppAddFriend),
-#     url(r'^iot/app/del/',AppRemoveFriend),
-#     url(r'^iot/app/bind/',AppBindDev),
-#     url(r'^iot/app/unbind/',AppDropDev),
-    url(r'^postjson/$',TestPostJson),
+    url(r'^iot/ping/(?P<token>\w+)/$',IotPing),
     url(r'^register/$',AppRegister),
     url(r'^get_code/$',get_verify_code),
+    url(r'^get_status/$',SqlTimeStatus)
 ] 
 
 

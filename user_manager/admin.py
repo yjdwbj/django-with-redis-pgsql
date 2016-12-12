@@ -5,13 +5,17 @@ from django.forms.fields import  DateTimeField
 from django import forms
 from .models import *
 from uuid import uuid4
+import base64
 from user_manager.models import SmsErrorLog
+import magic
 
 from django.utils.decorators import method_decorator
 from django.db import  transaction
 from django.views.decorators.csrf import csrf_protect
 
-from django.contrib.auth.hashers import make_password,check_password
+from django.contrib.auth.hashers import check_password
+from django.http import HttpResponse
+from django.utils.html import format_html
 
 
 
@@ -36,7 +40,7 @@ class MyCustomAdmin(admin.ModelAdmin):
         else:
             return url % ( obj.regip.ipaddr,obj.regip.ipaddr)
         
-    @csrf_protect_m
+
     @transaction.atomic
     def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
         return super(MyCustomAdmin,self).changeform_view(request,object_id,form_url,extra_context)
@@ -48,9 +52,19 @@ class MyCustomAdmin(admin.ModelAdmin):
 
 
 class DevicesAdmin(MyCustomAdmin):
-    list_display = ('uuid','mac','appkey','key','name','view_ip','regtime')
+    list_display = ('uuid','mac','appkey','name','view_ip','regtime')
+    
+    def get_form(self,request,obj=None,**kwargs):
+        form = super(DevicesAdmin,self).get_form(request,obj,**kwargs)
+        
+        if form.base_fields['regip'].queryset.count() == 0:
+            ### 必选项,手动添加一个进去.
+            IpAddress.objects.create(ipaddr="127.0.0.1")
+            form.base_fields['regip'].queryset = IpAddress.objects.all()
+        return form
     
     def save_model(self, request, obj, form, change):
+        print "start save--------------"
         data = request.GET
         if not data:
             data = request.POST
@@ -62,21 +76,40 @@ class DevicesAdmin(MyCustomAdmin):
     
 
 class AppUserAdmin(MyCustomAdmin):
-    list_display = ('uname','uuid','phone','view_ip','key','regtime','phone_active')
+    list_display = ('uname','uuid','email','phone','view_ip','regtime','phone_active','sex','nickname','view_avatar')
     
 #     def __init__(self,*args,**kwargs):
 #         super(AppUserAdmin,self).__init__(*args,**kwargs)
 #         self.exclude('key')
-    
 
+    def view_avatar(self,obj):
+        if len(obj.avatar) > 0:
+            rawdata = base64.b64decode(obj.avatar)
+            btype = magic.Magic().id_buffer(rawdata)
+#             return HttpResponse(rawdata, content_type='image/%s' % btype.split(' ')[0].lower())
+            return format_html('<img alt="avatar Image" src="data:image/%s;base64,%s" style="width:64px;height:64px;" />' %  (btype.split(' ')[0].lower(),obj.avatar))
+        
+    
+    def get_form(self,request,obj=None,**kwargs):
+        form = super(AppUserAdmin,self).get_form(request,obj,**kwargs)
+         
+        if form.base_fields['regip'].queryset.count() == 0:
+            ### 必选项,手动添加一个进去.
+            IpAddress.objects.create(ipaddr="127.0.0.1")
+            form.base_fields['regip'].queryset = IpAddress.objects.all()
+        return form
     
     def save_model(self, request, obj, form, change):
         ipobj,ok = IpAddress.objects.get_or_create(ipaddr=request.META.get('REMOTE_ADDR'))
         obj.regip = ipobj
-        obj.key = make_password(obj.key)
+        print "new key is",obj.key
+#         obj.key = make_password(obj.key)
 #         obj.uuid = uuid4().hex
         obj.save()
         
+
+        
+    view_avatar.short_description = u'头像'
 #     @csrf_protect_m
 #     @transaction.atomic
 #     def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
@@ -112,28 +145,7 @@ class AppUserLogAdmin(ReadOnlyAdmin):
 #     change_form_template = "change_list.html"
     list_display = ("user","inout","view_ip","optime")
     
-#     def get_list_display_links(self, request, list_display):
-#         """
-#         Return a sequence containing the fields to be displayed as links
-#         on the changelist. The list_display parameter is the list of fields
-#         returned by get_list_display().
-#         """
-#         if self.list_display_links or self.list_display_links is None or not list_display:
-#             return self.list_display_links
-#         else:
-#             # Use only the first item in list_display as link
-#             return None
-# #     def get_readonly_fields(self, request, obj=None):
-# #         return self.fields or [f.name for f in self.model._meta.fields]
-#         
-#     def has_add_permission(self, request):
-#         return False
-#     
-#     def has_delete_permission(self, request, obj=None):
-#         return False
-#      
-#     def save_model(self, request, obj, form, change):
-#         pass
+
     
 
 class DevicesLogAdmin(ReadOnlyAdmin):
@@ -159,43 +171,13 @@ class ServerAdmin(admin.ModelAdmin):
 class SendSmsErrorAdmin(ReadOnlyAdmin):
     list_display = ("phone","errcode","addtime","ipaddr")
     
-# class IdMakerAdmin(admin.ModelAdmin):
-#     using ='devdb'
-#     list_display = ('iot_uuid','iot_mac','iot_key','app_key','app_name','status','uid','typeid','info')
-#     
-#     def save_model(self, request, obj, form, change):
-#         # Tell Django to save objects to the 'other' database.
-#         obj.save(using=self.using)
-# 
-#     def delete_model(self, request, obj):
-#         # Tell Django to delete objects from the 'other' database
-#         obj.delete(using=self.using)
-# 
-#     def get_queryset(self, request):
-#         # Tell Django to look for objects on the 'other' database.
-#         return super(IdMakerAdmin, self).get_queryset(request).using(self.using)
-# 
-#     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-#         # Tell Django to populate ForeignKey widgets using a query
-#         # on the 'other' database.
-#         return super(IdMakerAdmin, self).formfield_for_foreignkey(db_field, request, using=self.using, **kwargs)
-# 
-#     def formfield_for_manytomany(self, db_field, request, **kwargs):
-#         # Tell Django to populate ManyToMany widgets using a query
-#         # on the 'other' database.
-#         return super(IdMakerAdmin, self).formfield_for_manytomany(db_field, request, using=self.using, **kwargs)
-#     
-        
-# class TimeFormat(ModelForm):
-#     class Meta:
-#         model = AppUserLoginHistory
-#     def __init__(self, *args, **kwargs):
-#         super(TimeFormat, self).__init__(*args, **kwargs)
-#         
-#     tt = forms.DateTimeField(input_formats=['%Y-%m-%d %H:%M:%S'])
-#     
-# class AppAdminTest(ReadOnlyAdmin):
-#     form = TimeFormat
+class MqttAclAdmin(ReadOnlyAdmin):
+    list_display = ('app','dev','access','topic')
+    
+class SharedListAdmin(ReadOnlyAdmin):
+    list_display = ('host','guest','sdevice','topics')
+    
+
 
 admin.site.register(Devices,DevicesAdmin)
 admin.site.register(AppUser,AppUserAdmin)
@@ -204,4 +186,6 @@ admin.site.register(SmsErrorLog,SendSmsErrorAdmin)
 admin.site.register(AppUserLoginHistory,AppUserLogAdmin)
 admin.site.register(DevicesLoginHistory,DevicesLogAdmin)
 admin.site.register(AppBindDevList,AppBindDevListAdmin)
+admin.site.register(MqttAcl,MqttAclAdmin)
+admin.site.register(SharedDevList,SharedListAdmin)
 # admin.site.register(DevicesMaker,IdMakerAdmin)
