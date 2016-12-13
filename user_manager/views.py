@@ -40,6 +40,7 @@ from urllib2 import HTTPError
 from models import *
 from django.core.files import File
 from django.db.models.query import Q
+from operator import __or__ as OR
 from uuid import UUID
 import mimetypes
 
@@ -87,6 +88,7 @@ ShareError = json.dumps({"err":"ShareError", "msg":u"无权分享该主题", "ok
 
 
 JsonType = 'application/json; charset=utf-8'
+ReturnOK = HttpResponse(json.dumps({'ok':True}),content_type = JsonType)
 
 
 # Create your views here.
@@ -116,9 +118,11 @@ def QueryCert(request,token,ipaddr):
     except (ObjectDoesNotExist, IndexError) as e:
         retdict['cert'] = None
     else:
+        #retdict['cert'] = srv.pubkey
+        ## 小机端不支持zlib
         import zlib
         retdict['cert'] =base64.b64encode(zlib.compress(base64.b64decode(srv.pubkey),9))
-    
+      
     return HttpReturn(json.dumps(retdict))
         
     
@@ -177,7 +181,7 @@ def PreCheckRequest(request, obj, data):
         DevicesLoginHistory.objects.create(devices=obj, inout=True, ipaddr=ipaddr, optime=timezone.now())
     else:
         AppUserLoginHistory.objects.create(user=obj, inout=True, ipaddr=ipaddr, optime=timezone.now())
-    return HttpResponse(json.dumps(retdict))
+    return HttpReturn(json.dumps(retdict))
 
 def SqlTimeStatus(request):
     avgtime = 0.0
@@ -189,7 +193,7 @@ def SqlTimeStatus(request):
         +str("mintime: %f\n" % settings.MINTIME) \
         +str("maxtime: %f\n" % settings.MAXTIME) \
         + "avgtime: %f\n" % avgtime
-    return HttpResponse(status)
+    return HttpReturn(status)
 
 
 def IotAppAuth(request):
@@ -203,8 +207,7 @@ def IotAppAuth(request):
 #     sign = data.get('sign','')
     obj = None;
     if not token or not key:
-        return HttpResponse(DataMiss,
-                                content_type=JsonType)
+        return HttpReturn(DataMiss)
     
 #     t = time.time()
 #     Person.objects.raw('SELECT * FROM myapp_person WHERE last_name = %s', [lname])
@@ -213,8 +216,7 @@ def IotAppAuth(request):
         obj = AppUser.objects.raw('SELECT * FROM user_manager_appuser where uname = %s OR email = %s OR uuid = %s OR phone= %s',
                                   [token,token,token,token])[0]
     except (ObjectDoesNotExist,IndexError) as e:
-        return HttpResponse(UserNotExists,
-                                content_type=JsonType)
+        return HttpReturn(UserNotExists)
     except ValueError:
         # If it's a value error, then the string 
         # is not a valid hex code for a UUID.
@@ -222,15 +224,13 @@ def IotAppAuth(request):
             obj = AppUser.objects.raw('SELECT * FROM user_manager_appuser where uname = %s OR email = %s  OR phone= %s',
                                   [token,token,token])[0]
         except:
-            return HttpResponse(UserNotExists,
-                                content_type=JsonType)
+            return HttpReturn(UserNotExists)
             
     # ##　email,phone,uuid 都在数据库里找不到    
     if not obj:
-        return HttpResponse(UserNotExists,
-                                content_type=JsonType)
+        return HttpReturn(UserNotExists)
     if not obj.phone_active:
-        return HttpResponse(PhoneInactive, content_type=JsonType)
+        return HttpReturn(PhoneInactive)
     
     return PreCheckRequest(request, obj, data)
     
@@ -246,14 +246,12 @@ def IotDevAuth(request):
     uuid = data.get('uuid', '')
     
     if not uuid or not key:
-        return HttpResponse(DataMiss,
-                                content_type=JsonType)
+        return HttpReturn(DataMiss)
     obj = None    
     try:
         obj = Devices.objects.get(uuid=uuid)
     except (ObjectDoesNotExist,ValueError) as e:
-        return HttpResponse(UserNotExists,
-                                content_type=JsonType)
+        return HttpReturn(UserNotExists)
         
     return PreCheckRequest(request, obj, data)
 
@@ -278,9 +276,9 @@ def IotAppRegister(request):
         
     if captcha:
         if cmp(mycaptcha, captcha):
-            return HttpResponse(CaptchaError, content_type=JsonType)
+            return HttpReturn(CaptchaError)
     else:
-        return HttpResponse(ArgError, content_type=JsonType)
+        return HttpReturn(ArgError)
     
     if uname:
         try:
@@ -288,10 +286,9 @@ def IotAppRegister(request):
         except :
             pass
         else:
-            return HttpResponse(UserError,
-                                content_type=JsonType)
+            return HttpReturn(UserError)
     else:
-        return HttpResponse(ArgError, content_type=JsonType)
+        return HttpReturn(ArgError)
         
     if phone:
         try:
@@ -299,10 +296,9 @@ def IotAppRegister(request):
         except :
             pass
         else:
-            return HttpResponse(PhoneError,
-                                content_type=JsonType)
+            return HttpReturn(PhoneError)
     else:
-        return HttpResponse(ArgError, content_type=JsonType)
+        return HttpReturn(ArgError, content_type=JsonType)
         
     if email:
         try:
@@ -310,10 +306,9 @@ def IotAppRegister(request):
         except :
             pass
         else:
-            return HttpResponse(EmailError,
-                                content_type=JsonType)
+            return HttpReturn(EmailError)
     else:
-        return HttpResponse(ArgError, content_type=JsonType)
+        return HttpReturn(ArgError)
     
 #     ipobj, ok = IpAddress.objects.get_or_create(ipaddr=request.META.get('REMOTE_ADDR'))
 #     obj = AppUser.objects.create(email=email, phone=phone,
@@ -339,7 +334,7 @@ def IotAppRegister(request):
     redis_pool.hset(sendsms_code, 'phone', phone)
     redis_pool.hset(sendsms_code, 'ipaddr', ipaddr)
     redis_pool.expire(sendsms_code, settings.SESSION_COOKIE_AGE)
-    return HttpResponse(json.dumps({"ok":True, "uuid":nuuid, 'smscode':sendsms_code}))
+    return HttpReturn(json.dumps({"ok":True, "uuid":nuuid, 'smscode':sendsms_code}))
    
 
 
@@ -383,8 +378,7 @@ def IotPing(request,token):
     if not redis_pool.hget(token, 'uuid'):
         return HttpReturn(UnAuth)
     redis_pool.expire(token, settings.SESSION_COOKIE_AGE)
-    return HttpResponse(json.dumps({'ok':True}),
-                            content_type=JsonType)
+    return ReturnOK
         
 def GetRequestBody(request):
     if request.body:
@@ -444,9 +438,9 @@ def CheckBindDev(request, key, dev_uuid, user):
 #                                      access=3, topic="/%s/#" % devuidhex)
 #         AppBindDevList.objects.create(appid=user, devid=dev_uuid)
         
-        return HttpResponse(json.dumps({"ok":True}), content_type=JsonType)
+        return ReturnOK
     else:
-        return HttpResponse(BindError, content_type=JsonType)  # 已经绑定了
+        return HttpReturn(BindError)  # 已经绑定了
 
 
 def AppCheckBindDev(request,user,uuid):
@@ -466,8 +460,7 @@ def AppCheckBindDev(request,user,uuid):
         AppBindDevList.objects.get(devid=dev_uuid)
     except (ObjectDoesNotExist, ValueError) as e:
         bound = False
-    return HttpResponse(json.dumps({"ok":True, "bound": bound}),
-                        content_type=JsonType)
+    return HttpReturn(json.dumps({"ok":True, "bound": bound}))
 
 @transaction.atomic
 def AppBindDev(request, user, uuid):
@@ -480,7 +473,7 @@ def AppBindDev(request, user, uuid):
     body = GetRequestBody(request)
 #     print "body is", body
     if not body:
-        return HttpResponse(ArgError, content_type=JsonType)
+        return HttpReturn(ArgError)
     
     ipaddr, ok = IpAddress.objects.get_or_create(ipaddr=request.META.get('REMOTE_ADDR'))    
     try:
@@ -493,11 +486,10 @@ def AppBindDev(request, user, uuid):
 #             print "type str is", type(uuid)
             iot_dev = DevicesMaker.objects.using('devdb').get(iot_uuid=uuid)
         except (ObjectDoesNotExist,ValueError) as e:
-            return HttpResponse(TargetNotExists,
-                            content_type=JsonType)
+            return HttpReturn(TargetNotExists)
         else:
             if iot_dev.status != 3:
-                return HttpResponse(DevActError, content_type=JsonType)
+                return HttpReturn(DevActError)
             else:
                 dev_uuid = Devices(mac=iot_dev.iot_mac,
                                        uuid=iot_dev.iot_uuid,
@@ -526,8 +518,7 @@ def AppDropDev(request, user, target):
     try:
         dev_uuid = Devices.objects.get(uuid=target)
     except (ObjectDoesNotExist,ValueError) as e:
-        return HttpResponse(TargetNotExists,
-                            content_type=JsonType)
+        return HttpReturn(TargetNotExists)
     else:
         # 删除绑定,同时删除ＡＣＬ,这里对于数据库要用到事务.
         try:                    
@@ -546,7 +537,7 @@ def AppDropDev(request, user, target):
             AppBindDevList.objects.get(appid=user, devid=dev_uuid).delete()
         except :
             pass
-        return HttpResponse(json.dumps({"ok":True}), content_type=JsonType)     
+        return ReturnOK     
     
 
 
@@ -557,23 +548,20 @@ def IotDevActive(request,account,pwd):
     except (ObjectDoesNotExist,ValueError) as e:
         pass
     else:
-        return HttpResponse(DupActError,
-                            content_type=JsonType)
+        return HttpReturn(DupActError)
         
     try:
        
         iot_dev = DevicesMaker.objects.using('devdb').get(iot_uuid=devid)
     except (ObjectDoesNotExist,ValueError) as e:
-        return HttpResponse(TargetNotExists,
-                            content_type=JsonType)
+        return HttpReturn(TargetNotExists)
    
     else:
         if iot_dev.status != 2:
-            return HttpResponse(DevActError, content_type=JsonType)
+            return HttpReturn(DevActError)
         else:
             if not check_password(pwd, iot_dev.iot_key):
-                return HttpResponse(PwdError,
-                            content_type=JsonType)
+                return HttpReturn(PwdError)
                 
             ipobj,ok = IpAddress.objects.get_or_create(ipaddr=request.META.get('REMOTE_ADDR'),
                                                     geoip=None)
@@ -586,7 +574,7 @@ def IotDevActive(request,account,pwd):
                                    regip=ipobj,
                                    regtime=timezone.now())
             
-            return HttpReturn(json.dumps({"ok":True}))
+            return ReturnOK
             
     
 
@@ -603,18 +591,18 @@ def AcceptBindLink(request, user, uuid):
         return HttpReturn(UnAuth)
         
         
-    print "shared redis key",shared_keys
+    print "shared redis key",shared_keys,'type is',type(shared_keys)
     
-    topic,ok =  MqttTopics.objects.get_or_create(topic="/%s/#" % user.uuid.hex)
+#     topic,ok =  MqttTopics.objects.get_or_create(topic="/%s/#" % user.uuid.hex)
     
-    SharedDevList.objects.get_or_create(host_id = shared_keys['appid'],
-                                        guest = user,
-                                        sdevice_id = shared_keys['devid'],
-                                        topics = shared_keys['topics'])
+#     SharedDevList.objects.get_or_create(host_id = shared_keys['appid'],
+#                                         guest = user,
+#                                         sdevice_id = shared_keys['devid'],
+#                                         topics = shared_keys['topics'])
     
-    tdict = json.loads(shared_keys['topics'])
-    print "topic dict is ",tdict
-    for item in tdict['topics'] :
+#     tdict = json.loads(shared_keys['topics'])
+#     print "topic dict is ",tdict
+    for item in shared_keys['topics'] :
 #         topic,ok =  MqttTopics.objects.get_or_create(topic=item)
         MqttAcl.objects.get_or_create(allow=1, ipaddr=None, clientid=None,
                                          app = user,
@@ -627,8 +615,95 @@ def AcceptBindLink(request, user, uuid):
     return HttpReturn(json.dumps({'ok':True, 'data':shared_keys}))
 #         return JsonResponse({'ok':True,'data':res},safe = False)
     
-def AppDelShareDev(request,user):
-    pass
+
+def AppDelShareDev(request,owner):
+    USERS = 'users'
+    TOPICS = "topics"
+    DEVS="devs"
+    ALL = "*"
+    deldict = GetRequestBody(request)
+    if not deldict or not all(x in [USERS,TOPICS,DEVS] for x in deldict):
+        return HttpReturn(ArgError)
+    
+    ## 先通过绑定表,找出该用户的所有绑定设备.
+    devices = AppBindDevList.objects.filter(appid = owner)
+    if isinstance(deldict[USERS],list):
+        def deleteTopic3(user,dev,topic):
+            txt = '/%s/%s/#' % (dev,topic)
+            print "{'users':[...],'topics':[...],'devs':*",txt
+            print "user is ----> ",user
+            MqttAcl.objects.filter(app_id = user,topic = txt).delete()
+            
+        
+        def deleteTopic(user,dev):
+                txt = '/%s' % (dev)
+                print "{'users':[...],'topics':all,'devs':*",txt
+                MqttAcl.objects.filter(app_id = user,topic__iexact = txt).delete()
+        if isinstance(deldict[TOPICS],list):
+            if isinstance(deldict[DEVS],list):
+                # {'users':[...],'topics':[...],'devs':[...]}
+                lst1 = [u.devid_id.hex for u in devices]
+                lst2 =list(set(lst1).intersection(set(deldict[DEVS])))
+                print "users -------=--------= ",deldict[USERS]
+                [deleteTopic3(user,dev,topic) for user in deldict[USERS] for dev in lst2 for topic in deldict[TOPICS]]
+            else:
+                # {'users':[...],'topics':[...],'devs':all}
+                [deleteTopic3(user,dev.devid_id.hex,topic) for user in deldict[USERS] for dev in devices for topic in deldict[TOPICS]]
+                
+        else:
+            
+            if isinstance(deldict[DEVS],list):
+                # {'users':[...],'topics':all,'devs':[...]}
+                lst1 = [u.devid_id.hex for u in devices]
+                # 取两个列表的交集.
+                lst2 =list(set(lst1).intersection(set(deldict[DEVS])))
+                [deleteTopic(user,dev) for user in deldict[USERS] for dev in lst2]
+                
+            else:
+                # {'users':[...],'topics':all,'devs':'all'}
+                [deleteTopic(user,dev) for user in deldict[USERS] for dev in devices]
+               
+    else:
+        if isinstance(deldict[TOPICS],list):
+            def deleteTopic(dev,topic):
+                    txt = '/%s/%s/#' % (dev,topic)
+                    print "{'users':'all','topics':[...],'devs':*}",txt
+                    MqttAcl.objects.filter(topic__iexact=txt).delete()
+#             devices = AppBindDevList.objects.filter(appid = user)
+            if isinstance(deldict[DEVS],list):
+                # {'users':'all','topics':[...],'devs':[...]}
+#                 lst = [Q(devid_id = x) for x in deldict['devs']]
+#                 devices = AppBindDevList.objects.filter(appid = user,reduce(OR,lst))
+                lst1 = [u.devid_id.hex for u in devices]
+                lst2 =list(set(lst1).intersection(set(deldict[DEVS])))
+                [deleteTopic(dev,topic) for dev in lst2 for topic in deldict[TOPICS]]
+                
+            else:
+                # {'users':'all','topics':[...],'devs':'all'}
+                
+                [deleteTopic(dev.devid_id.hex,topic) for dev in devices for topic in deldict[TOPICS]]
+ 
+        else:
+            if isinstance(deldict[DEVS],list):
+                # {'users':'all','topics':'all','devs':[...]}
+                lst1 = [u.devid_id.hex for u in devices]
+                lst2 =list(set(lst1).intersection(set(deldict[DEVS])))
+                for dev in lst2: 
+                    txt = '/%s' % (dev)
+                    print " {'users':'all','topics':'all','devs':[...]}",txt
+                    MqttAcl.objects.filter(topic__iexact=txt).delete()
+                        
+            else:
+                # {'users':'all','topics':'all','devs':'all'}
+#                 devices = AppBindDevList.objects.filter(appid = user)
+                
+                for dev in devices:
+                    txt = '/%s' % (dev.devid_id.hex)
+                    print "{'users':'all','topics':'all','devs':'all'}",txt
+                    MqttAcl.objects.filter(topic__iexact=txt).delete()
+    
+    return ReturnOK
+                    
 
 def AppShareDev(request, user, devuuid):
 
@@ -639,17 +714,16 @@ def AppShareDev(request, user, devuuid):
 #                                          [user.uuid.hex,devuuid])
         results = AppBindDevList.objects.filter(devid_id = devuuid,appid = user)[0]
     except (ObjectDoesNotExist,IndexError) as e:
-        return HttpResponse(TargetNotExists,
-                             content_type=JsonType)
+        return HttpReturn(TargetNotExists)
     print "result id ",results
     if results.devid.uuid.hex != devuuid:
-        return HttpResponse(TargetNotExists,
-                             content_type=JsonType)
+        return HttpReturn(TargetNotExists)
 
     otpuuid = uuid.uuid4().hex
     if not request.body:
         return HttpReturn(ArgError)
     topics = json.loads(request.body).get('topics',None)
+    print "share topics is ",topics
     ## 检查topics 是否为空,是否是为列表类型,是否全部为真.
     if not topics or  not isinstance(topics,list):
         return HttpReturn(ArgError)
@@ -663,7 +737,7 @@ def AppShareDev(request, user, devuuid):
     res = {'ok':True, 'otp':otpuuid,'expire':expire}
     redis_pool.hset(otpuuid,"appid",user.uuid.hex)
     redis_pool.hset(otpuuid,"devid",devuuid)
-    redis_pool.hset(otpuuid,"topics",request.body)
+    redis_pool.hset(otpuuid,"topics",topics)
     redis_pool.expire(otpuuid,expire)
     
 #         return JsonResponse(res,safe=False) 
@@ -675,16 +749,14 @@ def AppAddFriend(request, user, uuid):
     try:
         friend = AppUser.objects.get(uuid=uuid)
     except (ObjectDoesNotExist,ValueError) as e:
-        return HttpResponse(TargetNotExists,
-                            content_type=JsonType)
+        return HttpReturn(TargetNotExists)
     else:
         if friend == user:
             return HttpResponse(TargetIsSelf,
                             content_type=JsonType)
             
         AppFriendList.objects.get_or_create(my_uuid=user, friend=friend)
-        return HttpResponse(json.dumps({"ok":True}),
-                            content_type=JsonType)
+    return ReturnOK
 
 
 def AppRemoveFriend(request, user, uuid):
@@ -692,11 +764,9 @@ def AppRemoveFriend(request, user, uuid):
         friend = AppUser.objects.get(uuid=uuid)
         AppFriendList.objects.get(my_uuid=user, friend=friend).delete()
     except :
-        return HttpResponse(TargetNotExists,
-                            content_type=JsonType)
+        return HttpReturn(TargetNotExists)
     else:
-        return HttpResponse(json.dumps({"ok":True}),
-                            content_type=JsonType)
+        return ReturnOK
     
 
 def AppUploadProfile(request, user):
@@ -712,11 +782,9 @@ def AppVerifyPhone(request, Md5sum, smscode):
     mysms = redis_pool.hget(Md5sum, 'sms')
     
     if not phone or not smscode:
-        return HttpResponse(UnAuth,
-                            content_type=JsonType)
+        return HttpReturn(UnAuth)
     if cmp(mysms, smscode):
-        return HttpResponse(CaptchaError,
-                            content_type=JsonType)
+        return HttpReturn(CaptchaError)
     
     
     
@@ -751,8 +819,7 @@ def AppVerifyPhone(request, Md5sum, smscode):
     for (k,v) in adict.items():
         redis_pool.hdel(Md5sum,k)
     
-    return HttpResponse(json.dumps({"ok":True}),
-                            content_type=JsonType)
+    return ReturnOK
 
 
 actionFunc = {'bind':AppBindDev,
@@ -762,7 +829,7 @@ actionFunc = {'bind':AppBindDev,
               'del':AppRemoveFriend,
               'reqshare':AcceptBindLink,
               'sharedev':AppShareDev,
-              'delshare':AppDelShareDev}
+              }
 
 
 def AppAction(request, token, target, action):
@@ -770,8 +837,7 @@ def AppAction(request, token, target, action):
     mem_addr = redis_pool.hget(token, 'ipaddr')
      
     if not mem_addr or  cmp(mem_addr, ipaddr):
-        return HttpResponse(UnAuth,
-                            content_type=JsonType)
+        return HttpReturn(UnAuth)
     # ## 更新登录状态时间
     redis_pool.expire(token, settings.SESSION_COOKIE_AGE)
     
@@ -779,8 +845,7 @@ def AppAction(request, token, target, action):
     if action in actionFunc:
         return actionFunc[action](request, user, target)
     else:
-        return HttpResponse(UnkownAction,
-                            content_type=JsonType)
+        return HttpReturn(UnkownAction)
 
 def AppSetAvatar(request,user):
 #     print "request is",request.__dict__  
@@ -793,8 +858,7 @@ def AppSetAvatar(request,user):
         return HttpResponse(FormatError,
                             content_type=JsonType)
     if datalen > 102410:
-        return HttpResponse(SizeError,
-                            content_type=JsonType)
+        return HttpReturn(SizeError)
 #     user.avator = request.body
   
     cursor = connection.cursor()
@@ -806,8 +870,7 @@ def AppSetAvatar(request,user):
 
 #     transaction.set_dirty()        
     transaction.commit()
-    return HttpResponse(json.dumps({"ok":True}),
-                            content_type=JsonType) 
+    return ReturnOK
 
 def AppGetAvatar(request,user):
     return HttpResponse(base64.b64decode(user.avatar),content_type=user.get_mimetype)        
@@ -816,14 +879,13 @@ def AppGetAvatar(request,user):
 def AppUserChange(request, user):
     body = GetRequestBody(request)
     if not body:
-        return HttpResponse(ArgError, content_type=JsonType)
+        return HttpReturn(ArgError)
     
     oldpass = body.get('oldpass', None)
     
 #     if cmp(oldpass,user.key):   #### 修改信息必须要用原密码
     if not check_password(oldpass, user.key):
-        return HttpResponse(PwdError,
-                            content_type=JsonType)
+        return HttpReturn(PwdError)
     newpass = body.get('newpass', None)
 #
     
@@ -841,8 +903,8 @@ def AppUserChange(request, user):
     
     user.save()
     
-    return HttpResponse(json.dumps({"ok":True}),
-                            content_type=JsonType)
+    return ReturnOK
+
 
 
 def ChangeDevName(request,token,newname):
@@ -850,17 +912,16 @@ def ChangeDevName(request,token,newname):
     devuuid = redis_pool.hget(token,'uuid')
    
     if not devuuid:
-        return HttpResponse(UnAuth,
-                            content_type=JsonType) 
+        return HttpReturn(UnAuth) 
     try:
         devobj =  Devices.objects.get(uuid=devuuid)
     except:
-        return HttpResponse(TargetNotExists, content_type=JsonType)
+        return HttpReturn(TargetNotExists)
     else:
         devobj.name = newname
         devobj.save()
-        return HttpResponse(json.dumps({"ok":True}),
-                        content_type=JsonType)
+        return ReturnOK
+
     
         
         
@@ -869,7 +930,7 @@ def AppQueryApp(request, user):
     applist = AppFriendList.objects.filter(my_uuid=user) 
     
     results = [ob.as_json() for ob in AppUser.objects.filter(friend_user__in=applist)]
-    return HttpResponse(json.dumps({"list":results, "ok":True}), content_type=JsonType)
+    return HttpReturn(json.dumps({"list":results, "ok":True}))
 
 def AppQueryDev(request, user):
     devlist = AppBindDevList.objects.filter(appid=user)
@@ -891,12 +952,11 @@ def AppGetInfo(request,user):
 def AppSyncData(request, user):
     body = GetRequestBody(request)
     if not body:
-        return HttpResponse(ArgError, content_type=JsonType)
+        return HttpReturn(ArgError)
 #     print "-----------------------sync body is",body,type(user)
     user.data = body
     user.save()
-    return HttpResponse(json.dumps({"ok":True}),
-                            content_type=JsonType)
+    return ReturnOK
  
 
 def AppSendSms(request, account):
@@ -906,7 +966,7 @@ def AppSendSms(request, account):
 #     print "all key is",adict
     
     if 'phone' not in adict:
-        return HttpResponse(UnAuth, content_type=JsonType)
+        return HttpReturn(UnAuth)
         
 #     redis_pool.hdel(account, 'phone')
 #     print "phone number ", phone 
@@ -915,26 +975,26 @@ def AppSendSms(request, account):
     sendnum = redis_pool.hget(adict['phone'], SENDCOUNT)
 #     print "gettxt from redis", sendnum
     if sendnum and int(sendnum) == 3:
-        return HttpResponse(SmsOverError, content_type=JsonType)
+        return HttpReturn(SmsOverError)
     
     sendtime = redis_pool.hget(adict['phone'], 'lastime')
     
     if sendtime and (time.time() - int(sendtime)) < settings.SESSION_COOKIE_AGE / 10:
-        return HttpResponse(SmsIntervalError, content_type=JsonType)
+        return HttpReturn(SmsIntervalError)
         
 #     ipaddr = request.META.get('REMOTE_ADDR')
     ipobj, ok = IpAddress.objects.get_or_create(ipaddr=request.META.get('REMOTE_ADDR'))
     oldaddr = redis_pool.hget(account, 'ipaddr')
     if cmp(ipobj.ipaddr, oldaddr):
-        return HttpResponse(IpAddrError, content_type=JsonType)
+        return HttpReturn(IpAddrError)
     
     try:
         (sms, state) = sendsms.SendSMS(adict['phone'])
     except HTTPError:
-        return HttpResponse(InternalError, content_type=JsonType)
+        return HttpReturn(InternalError)
     except IndexError:
         SmsErrorLog.objects.create(-100, ipobj, timezone.now, adict['phone'])
-        return HttpResponse(InternalError, content_type=JsonType)
+        return HttpReturn(InternalError)
     if state == 0:
         redis_pool.expire(adict['phone'], settings.SESSION_COOKIE_AGE)
         redis_pool.hset(adict['phone'], 'lastime', int(time.time()))
@@ -953,7 +1013,7 @@ def AppSendSms(request, account):
 #         print "reset code dict is",redis_pool.hgetall(resetcode)
         redis_pool.expire(resetcode, settings.SESSION_COOKIE_AGE)
         redis_pool.hdel(account, 'phone') ## 删除这个键,一次有效
-        return HttpResponse(json.dumps({"ok":True, 'rescode':resetcode}))
+        return HttpReturn(json.dumps({"ok":True, 'rescode':resetcode}))
     else:
         if state in ErrDict:
             errobj = SmsErrorTable.objects.get(errcode=state)
@@ -974,7 +1034,8 @@ QueryFunc = {'querydev':AppQueryDev,
              'change':AppUserChange,
              'setavatar':AppSetAvatar,
              'getavatar':AppGetAvatar,
-             'sendsms':AppSendSms}    
+             'sendsms':AppSendSms,
+             'delshare':AppDelShareDev}    
  
  
 def AppResetPwd(request, Md5sum, newpass, smscode):
@@ -984,11 +1045,9 @@ def AppResetPwd(request, Md5sum, newpass, smscode):
     
     
     if not phone or not smscode:
-        return HttpResponse(UnAuth,
-                            content_type=JsonType)
+        return HttpReturn(UnAuth)
     if cmp(mysms, smscode):
-        return HttpResponse(CaptchaError,
-                            content_type=JsonType)
+        return HttpReturn(CaptchaError)
     
     #### 已经验证了,清除内存
     redis_pool.hdel(Md5sum, 'phone')
@@ -1001,8 +1060,7 @@ def AppResetPwd(request, Md5sum, newpass, smscode):
     except:
         pass
     
-    return HttpResponse(json.dumps({"ok":True}),
-                            content_type=JsonType)
+    return ReturnOK
     
 def AppFindPwd(request, account, captcha):
 #     print "find pwd first", account, captcha
@@ -1039,7 +1097,7 @@ def AppFindPwd(request, account, captcha):
                               'phone': "%s****%s" % (accobj.phone[:3], accobj.phone[-4:]),
                               'smscode': smscode,
                               'ok':True}
-        return HttpResponse(json.dumps(res), content_type=JsonType)
+        return HttpReturn(json.dumps(res))
     
         
     
@@ -1049,8 +1107,7 @@ def AppQuery(request, token, action):
     mem_addr = redis_pool.hget(token, 'ipaddr')
 #     print "action from signid ",data,' ipaddr ',ipaddr
     if not mem_addr or mem_addr != ipaddr:
-        return HttpResponse(UnAuth,
-                                content_type=JsonType)
+        return HttpReturn(UnAuth)
     
     if action == 'logout':
 #         print "request", request.path
@@ -1064,8 +1121,7 @@ def AppQuery(request, token, action):
         redis_pool.expire(token, 1)
         redis_pool.hdel(token, 'ipaddr')
         redis_pool.hdel(token, 'uuid')
-        return HttpResponse(json.dumps({"ok":True}),
-                                content_type=JsonType)
+        return ReturnOK
     
     user = AppUser.objects.get(uuid=redis_pool.hget(token, 'uuid'))
     # ## 更新登录状态时间
@@ -1073,7 +1129,6 @@ def AppQuery(request, token, action):
     if action in QueryFunc:
         return QueryFunc[action](request, user)
     else:
-        return HttpResponse(UnkownAction,
-                            content_type=JsonType)
+        return HttpReturn(UnkownAction)
      
         
