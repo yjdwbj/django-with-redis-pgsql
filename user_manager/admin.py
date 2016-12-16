@@ -64,14 +64,15 @@ class DevicesAdmin(MyCustomAdmin):
         return form
     
     def save_model(self, request, obj, form, change):
-        print "start save--------------"
+#         print "start save--------------"
         data = request.GET
         if not data:
             data = request.POST
-        obj.uuid = data.get('uuid',uuid4().hex)
+#         obj.uuid = data.get('uuid',uuid4().hex)
         ipobj,ok = IpAddress.objects.get_or_create(ipaddr=request.META.get('REMOTE_ADDR'))
         obj.regip = ipobj
-        obj.key = make_password(obj.key)
+#         print "save _model uuid ",obj.uuid
+#         obj.key = make_password(obj.key)
         obj.save()
     
 
@@ -102,7 +103,7 @@ class AppUserAdmin(MyCustomAdmin):
     def save_model(self, request, obj, form, change):
         ipobj,ok = IpAddress.objects.get_or_create(ipaddr=request.META.get('REMOTE_ADDR'))
         obj.regip = ipobj
-        print "new key is",obj.key
+#         print "new key is",obj.key
 #         obj.key = make_password(obj.key)
 #         obj.uuid = uuid4().hex
         obj.save()

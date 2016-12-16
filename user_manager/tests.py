@@ -37,7 +37,7 @@ class dbTogeterTestCase(TestCase):
                                uname='pdpd',
                                uuid=self.uuid1,
                                email=self.email1,
-                               key=make_password('aaaaaa'),
+                               key='aaaaaa',
                                phone=self.phone1,
                                regtime=timezone.now(),
                                regip=localip,
@@ -48,7 +48,7 @@ class dbTogeterTestCase(TestCase):
                                uname='ttt',
                                uuid=self.uuid2,
                                email=self.email2,
-                               key=make_password('aaaaaa'),
+                               key='aaaaaa',
                                phone=self.phone2,
                                regtime=timezone.now(),
                                regip=localip,
@@ -62,7 +62,7 @@ class dbTogeterTestCase(TestCase):
         try:
             AppUser.objects.create(uuid=self.uuid2,
                                    email=self.email1,
-                                   key=make_password('aaaaaa'),
+                                   key='aaaaaa',
                                    phone=self.phone2,
                                    regtime=timezone.now(),
                                    regip=localip,
@@ -77,7 +77,7 @@ class dbTogeterTestCase(TestCase):
         try:
             obj2 = AppUser.objects.create(uuid=self.uuid2,
                                    email=self.email2,
-                                   key=make_password('aaaaaa'),
+                                   key='aaaaaa',
                                    phone=self.phone1,
                                    regtime=timezone.now(),
                                    regip=localip,
@@ -104,7 +104,7 @@ class IotAuthTestCase(TestCase):
                               uuid=self.uuid1,
 #                             uuid = uuid.uuid4().hex,
                                email='www@test.com',
-                               key=make_password('aaaaaa'), phone='13833339999',
+                               key='aaaaaa', phone='13833339999',
                                regtime=timezone.now(),
                                regip=ipobj,
                                data=self.profile,
@@ -115,7 +115,7 @@ class IotAuthTestCase(TestCase):
                               uuid=self.uuid2,
 #                             uuid = uuid.uuid4().hex,
                                email='www@test2.com',
-                               key=make_password('aaaaaa'), phone='13833339900',
+                               key='aaaaaa', phone='13833339900',
                                regtime=timezone.now(),
                                regip=ipobj,
                                data=self.profile,
@@ -125,14 +125,14 @@ class IotAuthTestCase(TestCase):
                               uuid=self.uuid3,
 #                             uuid = uuid.uuid4().hex,
                                email='www@test3.com',
-                               key=make_password('aaaaaa'), phone='13833339901',
+                               key='aaaaaa', phone='13833339901',
                                regtime=timezone.now(),
                                regip=ipobj,
                                data=self.profile,
                                    phone_active=True)
         
         Devices.objects.create(uuid=uuid.uuid4().hex,
-                               key=make_password('aaaaaa'),
+                               key='aaaaaa',
                                appkey='1111111',
                                regtime=timezone.now(),
                                name='test1',
@@ -140,7 +140,7 @@ class IotAuthTestCase(TestCase):
                                mac='00:11:22:33:44:55')
         
         Devices.objects.create(uuid=uuid.uuid4().hex,
-                               key=make_password('aaaaaa'),
+                               key='aaaaaa',
                                appkey='1111112',
                                regtime=timezone.now(),
                                name='test2',
@@ -482,11 +482,8 @@ class IotAuthTestCase(TestCase):
     def login_request(self, user):
         data = OrderedDict()
         data ['uuid'] = user.uuid.hex
-#         data['uuid'] = user.uuid.hex
-#         data['key'] =  user.key
-#         data['time'] = time.strftime('%Y-%m-%d %H:%M:%S')
         data['key'] = 'aaaaaa'
-#         data['signMethod'] = 'HmacMD5'
+
        
         request = self.factory.get('/iot/app/auth/?uuid=%s&key=%s' % (user.uname,'aaaaaa'), data, False)
        
@@ -509,27 +506,17 @@ class IotAuthTestCase(TestCase):
         print "start test Dev Auth .........................."
         dev = Devices.objects.all()[1]
         
-        
-        data = OrderedDict()
-        data['uuid'] = dev.uuid.hex
-#         data['key'] = dev.key
-        data['time'] = time.strftime('%Y-%m-%d %H:%M:%S')
-        data['resFlag'] = 'all'
+        data = {}
+        data ['uuid'] = dev.uuid.hex
         data['key'] = 'aaaaaa'
-        data['signMethod'] = 'HmacSHA1'
-        msg = ''.join(['%s%s' % (k, v) for k, v in  OrderedDict(sorted(data.items())).items()])
-        data['sign'] = hmac.new(str(dev.key), msg,
-                                hashlib.sha1).hexdigest().upper()
-        get_request = RequestFactory()
-
-        print "test DevAuth request",'&'.join(['%s=%s' % (k, v) for k, v in  OrderedDict(sorted(data.items())).items()])
-        request = get_request.get('/iot/dev/auth', data, False)
+        request = self.factory.get('/iot/dev/auth/?uuid=%s&key=aaaaaa' % dev.uuid.hex,data ,False)
         response = IotDevAuth(request)
         print "test DevAuth response",response
         d = json.loads(response.content);
         
         print "test DevAuth response",response,
         print "test DevAuth Dict ",d
+       
         self.assertEqual(d['ok'], True)
         
    
@@ -556,7 +543,7 @@ class ShareTopicTestCase(TestCase):
                               uuid=self.uuid1,
 #                             uuid = uuid.uuid4().hex,
                                email='www@test.com',
-                               key=make_password('aaaaaa'), phone='13833339999',
+                               key='aaaaaa', phone='13833339999',
                                regtime=timezone.now(),
                                regip=ipobj,
                                data=self.profile,
@@ -567,7 +554,7 @@ class ShareTopicTestCase(TestCase):
                               uuid=self.uuid2,
 #                             uuid = uuid.uuid4().hex,
                                email='www@test2.com',
-                               key=make_password('aaaaaa'), phone='13833339900',
+                               key='aaaaaa', phone='13833339900',
                                regtime=timezone.now(),
                                regip=ipobj,
                                data=self.profile,
@@ -577,14 +564,14 @@ class ShareTopicTestCase(TestCase):
                               uuid=self.uuid3,
 #                             uuid = uuid.uuid4().hex,
                                email='www@test3.com',
-                               key=make_password('aaaaaa'), phone='13833339901',
+                               key='aaaaaa', phone='13833339901',
                                regtime=timezone.now(),
                                regip=ipobj,
                                data=self.profile,
                                    phone_active=True)
         
         Devices.objects.get_or_create(uuid=self.devuuid1,
-                               key=make_password('aaaaaa'),
+                               key='aaaaaa',
                                appkey='1111111',
                                regtime=timezone.now(),
                                name='test1',
@@ -592,7 +579,7 @@ class ShareTopicTestCase(TestCase):
                                mac='00:11:22:33:44:55')
         
         Devices.objects.get_or_create(uuid=self.devuuid2,
-                               key=make_password('aaaaaa'),
+                               key='aaaaaa',
                                appkey='1111112',
                                regtime=timezone.now(),
                                name='test2',

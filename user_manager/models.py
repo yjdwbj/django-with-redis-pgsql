@@ -3,7 +3,7 @@ from __future__ import unicode_literals
 
 from django.db import models
 from django.conf import settings
-from django.contrib.auth.models import AbstractBaseUser,BaseUserManager,PermissionsMixin
+# from django.contrib.auth.models import AbstractBaseUser,BaseUserManager,PermissionsMixin
 from django.utils import timezone
 import uuid
 import json
@@ -78,7 +78,7 @@ class AppUser(models.Model):
     regtime = models.DateTimeField(default=timezone.now,verbose_name=u'注册时间')    
     data = JSONField(null=True,default={'null':'null'},verbose_name=u'配置信息')
     phone_active = models.BooleanField(default=False,verbose_name=u'手机已验证')
-    nickname = models.CharField(null=True,max_length=64,verbose_name=u'昵称')
+    nickname = models.CharField(null=True,default=u"新用户",max_length=64,verbose_name=u'昵称')
     sex = models.IntegerField(choices=GENDER_CHOICES,default=0,verbose_name=u'性别')
     avatar = models.BinaryField(verbose_name=u'头像')
     
@@ -107,13 +107,14 @@ class AppUser(models.Model):
             return "image/%s" % btype.split(' ')[0].lower()
         
     def save(self, *args, **kw):
+#         print "my self key ",self.key
         if self.pk is not None:
             try:
                 orig = AppUser.objects.get(pk=self.pk)
                 if orig.key != self.key:
                     self.key = make_password(self.key)
             except ObjectDoesNotExist:
-                pass
+                self.key = make_password(self.key)
         super(AppUser, self).save(*args, **kw)
         
 
@@ -183,6 +184,17 @@ class Devices(models.Model):
                     name = f(self.name) )
     def get_name(self):
         return unicode(self.name) or u'empty'
+    
+    def save(self, *args, **kw):
+#         print "my self key ",self.key
+        if self.pk is not None:
+            try:
+                orig = Devices.objects.get(pk=self.pk)
+                if orig.key != self.key:
+                    self.key = make_password(self.key)
+            except ObjectDoesNotExist:
+                self.key = make_password(self.key)
+        super(Devices, self).save(*args, **kw)
        
         
     
