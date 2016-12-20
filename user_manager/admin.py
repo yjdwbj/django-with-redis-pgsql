@@ -16,6 +16,7 @@ from django.views.decorators.csrf import csrf_protect
 from django.contrib.auth.hashers import check_password
 from django.http import HttpResponse
 from django.utils.html import format_html
+from django.forms import ModelForm,FileInput
 
 
 
@@ -164,9 +165,19 @@ class AppBindDevListAdmin(ReadOnlyAdmin):
     get_dev.short_description = u'设备ID'
         
 
+
+
+# class ServerForm(ModelForm):
+#     cert = models.FileField(upload_to=None)
+#     class Meta:
+#         model = SrvList
+#         fields = ['ipaddr','port','mver','cert','concount']
+       
     
 class ServerAdmin(admin.ModelAdmin):
     list_display = ('ipaddr','port','mver','concount')
+#     form = ServerForm
+   
     
     
 class SendSmsErrorAdmin(ReadOnlyAdmin):

@@ -76,6 +76,8 @@ G_OK = 'ok'
 G_ERR = 'err'
 G_DATA = 'data'
 G_EXPIRE = 'expire'
+G_SRVS = 'srvs'
+G_VER = 'ver'
 
 UnkownSignMethod = json.dumps({G_ERR:"UnkownSignMethod",
                 G_MSG:u"未知签名方法", G_OK:False}, ensure_ascii=False)
@@ -143,8 +145,9 @@ def QueryCert(request,token,ipaddr):
     else:
         #retdict['cert'] = srv.pubkey
         ## 小机端不支持zlib
-        import zlib
-        retdict['cert'] =base64.b64encode(zlib.compress(base64.b64decode(srv.pubkey),9))
+#         print "cert is ",srv.cert
+#         import zlib
+        retdict['cert'] =str(srv.cert)
       
     return HttpReturn(json.dumps(retdict))
         
@@ -166,8 +169,8 @@ def PreCheckRequest(request, obj, data):
     try:
         srvipaddr = SrvList.objects.values_list(G_IPADDR).annotate(Min('concount')).order_by('concount')[0]   
     except (ObjectDoesNotExist, IndexError) as e:
-        retdict['servers'] = None
-        retdict['mqttver'] = None
+        retdict[G_SRVS] = None
+#         retdict[G_VER] = None
     else:
         srvobj = SrvList.objects.get(ipaddr=srvipaddr[0])
         ### 这里新的不再返回服务器的证
@@ -179,8 +182,8 @@ def PreCheckRequest(request, obj, data):
 #         else:
 #             retdict['servers'] = ':'.join([srvobj.ipaddr, str(srvobj.port)])
 #             retdict['pubkey'] = base64.b64encode(srvobj.pubkey) 
-        retdict['mqttver'] = srvobj.mver
-        retdict['servers'] = ':'.join([srvobj.ipaddr, str(srvobj.port)])
+#         retdict[G_VER] = srvobj.mver
+        retdict[G_SRVS] = ':'.join([srvobj.ipaddr, str(srvobj.port)])
     retdict['time'] = str(int(time.time()))
     retdict[G_EXPIRE] = settings.SESSION_COOKIE_AGE
 
@@ -189,6 +192,7 @@ def PreCheckRequest(request, obj, data):
     retdict[G_SIGN] = hmac.new(str(salt), str(time.time())).hexdigest().upper()
     retdict[G_OK] = True
     hkey = retdict[G_SIGN]
+    
     
     
     ipaddr, state = IpAddress.objects.get_or_create(ipaddr=request.META.get(G_REMOTE_ADDR))
@@ -203,6 +207,7 @@ def PreCheckRequest(request, obj, data):
         DevicesLoginHistory.objects.create(devices=obj, inout=True, ipaddr=ipaddr)
     else:
         AppUserLoginHistory.objects.create(user=obj, inout=True, ipaddr=ipaddr)
+        retdict[G_UUID] = obj.uuid.hex
     return HttpReturn(json.dumps(retdict))
 
 def IotAppAuth(request):
@@ -240,6 +245,8 @@ def IotAppAuth(request):
         return HttpReturn(UserNotExists)
     if not obj.phone_active:
         return HttpReturn(PhoneInactive)
+
+    
     
     return PreCheckRequest(request, obj, data)
     

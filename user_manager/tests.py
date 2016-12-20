@@ -149,10 +149,10 @@ class IotAuthTestCase(TestCase):
         
         SrvList.objects.create(ipaddr='8.8.8.87', port=1234,
                                concount=3, mver='1.0.1',
-                               pubkey='dddddddddddddddddddddddddd')
+                               cert='dddddddddddddddddddddddddd')
         SrvList.objects.create(ipaddr='44.5.44.87', port=1234,
                                concount=1, mver='1.0.1',
-                               pubkey='dddddddddddddddddddddddddd')
+                               cert='dddddddddddddddddddddddddd')
         
     def test_AppBindDev(self):
         print "start test app bind dev |||||||||||||||||||||||||||||||||||||||||||||||||||||||||"
@@ -586,12 +586,13 @@ class ShareTopicTestCase(TestCase):
                                regip=ipobj,
                                mac='aa:11:22:33:44:55')
         
+        
         SrvList.objects.get_or_create(ipaddr='8.8.8.87', port=1234,
                                concount=3, mver='1.0.1',
-                               pubkey='dddddddddddddddddddddddddd')
+                               cert='sssss')
         SrvList.objects.get_or_create(ipaddr='44.5.44.87', port=1234,
-                               concount=1, mver='1.0.1',
-                               pubkey='dddddddddddddddddddddddddd')
+                               concount=1, mver='1.0.1'
+                               ,cert='ssss')
     
     
             

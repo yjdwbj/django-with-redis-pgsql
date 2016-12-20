@@ -4,12 +4,14 @@ from __future__ import unicode_literals
 from django.db import models
 from django.conf import settings
 # from django.contrib.auth.models import AbstractBaseUser,BaseUserManager,PermissionsMixin
-from django.utils import timezone
+from django.utils import timezone,six
+from django.forms import ValidationError
 import uuid
 import json
 import base64,magic
 from django.contrib.postgres.fields import JSONField
 from django.core.exceptions import ObjectDoesNotExist
+from django.core.files.uploadedfile import InMemoryUploadedFile
 # Create your models here.
 
 from django.contrib.auth.hashers import PBKDF2SHA1PasswordHasher
@@ -169,19 +171,19 @@ class Devices(models.Model):
     key = models.CharField(max_length=128,blank=False,verbose_name=u'密码');
     appkey = models.CharField(max_length=8,unique=True,blank=False,verbose_name=u'APP密码');
     uuid = models.UUIDField(primary_key = True,default=uuid.uuid4().hex,unique=True,verbose_name=u'设备ID');
-    name = models.CharField(max_length=256,null=True,blank=True,default=u'empty',verbose_name=u'名称');
+    name = models.CharField(max_length=256,blank=False,default=u'empty',verbose_name=u'名称');
     regip = models.ForeignKey(IpAddress,on_delete = models.CASCADE,verbose_name=u'注册地址')
     regtime = models.DateTimeField(default=timezone.now,verbose_name=u'注册时间')  
     
     def __unicode__(self):
-        return unicode(self.name) or u''
+        return unicode(self.name) or u'empty'
     
     def as_json(self):
-        f = lambda x: x if not x else u"empty"
+#         f = lambda x: x if not x else u"empty"
         return dict(mac = self.mac,
-#                     key = self.key,
                     uuid = self.uuid.hex,
-                    name = f(self.name) )
+                    name = self.name)
+#                     name = f(self.name) )
     def get_name(self):
         return unicode(self.name) or u'empty'
     
@@ -338,22 +340,60 @@ class MqttUser(models.Model):
     
     def __unicode__(self):
         return self.uuid
+  
+
+ ##　这种?#要dd 
+class BinaryFileField(models.FileField):
+    def __init__(self,max_upload_size=2048,*args, **kwargs):
+        self.max_upload_size = max_upload_size
+        self.attr_class.bindata = None
+        super(BinaryFileField, self).__init__(*args, **kwargs)
+        
+    def clean(self,*args,**kwargs):
+        data = super(BinaryFileField,self).clean(*args,**kwargs)
+        readlines =data.file.readlines()
+#         self.attr_class.bindata = ''.join(readlines[1:-1])
+        import zlib
+        setattr(data,'bindata',zlib.compress(''.join([x.replace('\n','') for x in readlines[1:-1]]),9))
+#         setattr(data,'bindata',''.join(readlines[1:-1]))
+        if data.file.size > self.max_upload_size:
+            raise ValidationError(u'文件超过%sK' % self.max_upload_size/1024)
+#         print "upload data is ",type(data),data
+        return data
+        
+    def db_type(self,connection):
+        return 'bytea'
     
+    
+    def from_db_value(self, value, expression, connection, context):
+#         print "value is ",value
+        if value is None:
+            return value or u""
+        return  value
+
 
 class SrvList(models.Model):
     class Meta:
         verbose_name = u'服务器管理'
         verbose_name_plural= verbose_name
-    ipaddr = models.GenericIPAddressField(primary_key=True,max_length=15,blank=False,verbose_name=u'服务器IP');
+       
+    ipaddr = models.GenericIPAddressField(primary_key=True,max_length=15,blank=False,
+                                          default="127.0.0.1",verbose_name=u'服务器IP');
 #     node = models.CharField(primary_key = True,max_length=32,blank = False,verbose_name=u"节点名称") 
     port = models.IntegerField(default=1883,verbose_name=u'端口')
-    mver = models.CharField(max_length=16,verbose_name=u'服务器版本')
-    pubkey = models.TextField(max_length=2048,verbose_name=u'服务器公钥')
-    http_user = models.CharField(max_length=32,default='admin',verbose_name=u'Web用户名')
-    http_pass = models.CharField(max_length=32,default='public',verbose_name=u'Web密码')
-    concount = models.IntegerField(verbose_name=u'用户连接数')
+    mver = models.CharField(max_length=16,default=1,verbose_name=u'服务器版本')
+#     pubkey = models.TextField(max_length=2048,verbose_name=u'服务器公钥')
+    cert = BinaryFileField(verbose_name=u"服务器证书")
+#     http_user = models.CharField(max_length=32,default='admin',verbose_name=u'Web用户名')
+#     http_pass = models.CharField(max_length=32,default='public',verbose_name=u'Web密码')
+    concount = models.IntegerField(default=1,verbose_name=u'用户连接数')
     def __unicode__(self):
         return self.ipaddr
+    
+    def save(self, *args, **kw):
+        if self.cert.bindata:
+            self.cert =base64.b64encode(self.cert.bindata)
+        super(SrvList,self).save(*args, **kw)
 #     Servre_SignMethod = models.CharField(max_length=15,verbose_name=u'签名方式')
     
 
