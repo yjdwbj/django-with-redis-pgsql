@@ -167,7 +167,7 @@ class IotAuthTestCase(TestCase):
         
         self.signid = d['sign']     
         ###  bind dev test ########
-        url = '/iot/app/opt/%s/%s/bind/' % (self.signid, dev.uuid.hex)
+        url = '/iot/v1.0/app/opt/%s/%s/bind/' % (self.signid, dev.uuid.hex)
         
         post_request = RequestFactory()
         post_request = post_request.post(url, json.dumps({'dkey':'aaaaaa'}), ConType)
@@ -182,7 +182,7 @@ class IotAuthTestCase(TestCase):
         
         ############## bind second devices ##########  
         
-        url = '/iot/app/opt/%s/%s/bind/' % (self.signid, dev2.uuid.hex)
+        url = '/iot/v1.0/app/opt/%s/%s/bind/' % (self.signid, dev2.uuid.hex)
         post_request = RequestFactory()
         post_request = post_request.post(url, json.dumps({'dkey':'aaaaaa'}), ConType)
         post_request.__dict__['body'] = json.dumps({'dkey':'aaaaaa'})
@@ -197,15 +197,15 @@ class IotAuthTestCase(TestCase):
         ######### test device name ###################
         ##url(r'^iot/app/chamgedev/(?P<token>\w+)/(?P<target>\w+)/(?P<newname>\w+)/$',ChangeDevName),
         
-        request = self.factory.get('/iot/dev/auth/?uuid=%s&key=%s' % (dev2.uuid.hex,'aaaaaa'))
+        request = self.factory.get('/iot/v1.0/dev/auth/%s/%s/' % (dev2.uuid.hex,'aaaaaa'))
        
-        response = IotDevAuth(request)
+        response = IotDevAuth(request,dev2.uuid.hex,'aaaaaa')
         print "login Device response",response
         d = json.loads(response.content)
         self.assertEqual(d['ok'], True)   
        
         print "----------------- test change device name ---------------------------"
-        url = '/iot/dev/changedev/%s/%s/' % (d['sign'] ,"test123")
+        url = '/iot/v1.0/dev/changedev/%s/%s/' % (d['sign'] ,"test123")
         request = self.factory.get(url)
         response = ChangeDevName(request,d['sign'],"test1234")
         d = json.loads(response.content)
@@ -216,7 +216,7 @@ class IotAuthTestCase(TestCase):
         
         ############## test query bind list ##########
         
-        url = '/iot/app/%s/querydev/' % self.signid
+        url = '/iot/v1.0/app/%s/querydev/' % self.signid
         request = self.factory.get(url)
         print "query bind list request data", request.POST
         
@@ -231,7 +231,7 @@ class IotAuthTestCase(TestCase):
         
         
         ################## sync data to server #########
-        url = '/iot/app/%s/sync/' % self.signid
+        url = '/iot/v1.0/app/%s/sync/' % self.signid
         request = self.factory.get(url)
         print "query bind list request data", request.POST
         
@@ -254,7 +254,7 @@ class IotAuthTestCase(TestCase):
         
         
         ######### link shared ##############
-        url = '/iot/app/opt/%s/%s/sharedev/' % (self.signid, dev2.uuid.hex)
+        url = '/iot/v1.0/app/opt/%s/%s/sharedev/' % (self.signid, dev2.uuid.hex)
         
         testdata = {'baidu':'www.baidu.com',
                     'google':'www.google.com',
@@ -266,7 +266,6 @@ class IotAuthTestCase(TestCase):
         testdata = {'topics':['wifi','poweroff']}
         post_request = post_request.post(url, json.dumps(testdata), ConType)
 #         post_request.__dict__['body'] = json.dumps(testdata)
-        
         response = AppAction(post_request, self.signid, dev2.uuid.hex, 'sharedev')
         print '----------------app shared uuid response ', response.content
         d = json.loads(response.content)
@@ -275,7 +274,7 @@ class IotAuthTestCase(TestCase):
         ######### request dev bind ##########
         otp = d.get('otp', '')
         self.assertNotEqual(otp, None)
-#         url = '/iot/app/opt/%s/%s/reqshare/' % (self.signid , otp)
+#         url = '/iot/v1.0/app/opt/%s/%s/reqshare/' % (self.signid , otp)
 #         request = self.factory.get(url)
 #         response = AppAction(request, self.signid, otp, 'reqshare')
 #         print '*************server request bind response,', response
@@ -289,7 +288,7 @@ class IotAuthTestCase(TestCase):
         
         ################### del bind dev test ########
         
-        url = '/iot/app/opt/%s/%s/unbind/' % (self.signid, dev.uuid.hex)
+        url = '/iot/v1.0/app/opt/%s/%s/unbind/' % (self.signid, dev.uuid.hex)
        
         post_request = RequestFactory()
         post_request = post_request.post(url, json.dumps({'dkey':'aaaaaa'}), 'application/json; charset=utf-8')
@@ -308,7 +307,7 @@ class IotAuthTestCase(TestCase):
         
         ###########  app add friend ################## 
         
-        url = '/iot/app/opt/%s/%s/add/' % (self.signid, user2.uuid.hex)
+        url = '/iot/v1.0/app/opt/%s/%s/add/' % (self.signid, user2.uuid.hex)
         request = self.factory.get(url)
         print "add new friend request data", request.POST
         
@@ -321,7 +320,7 @@ class IotAuthTestCase(TestCase):
         
         ########### app seconds friend ##############
         
-        url = '/iot/app/opt/%s/%s/add/' % (self.signid, user3.uuid.hex)
+        url = '/iot/v1.0/app/opt/%s/%s/add/' % (self.signid, user3.uuid.hex)
         request = self.factory.get(url)
         print "add  second new friend request data", request.POST
         
@@ -334,7 +333,7 @@ class IotAuthTestCase(TestCase):
         
         ################## app add self to friend ######## 
         
-        url = '/iot/app/opt/%s/%s/add/' % (self.signid, user.uuid.hex)
+        url = '/iot/v1.0/app/opt/%s/%s/add/' % (self.signid, user.uuid.hex)
         request = self.factory.get(url)
         print "add self new friend request data", request.POST
         
@@ -348,7 +347,7 @@ class IotAuthTestCase(TestCase):
         
         
         ################## app query friend list ########### 
-        url = '/iot/app/query/%s/queryapp/' % self.signid
+        url = '/iot/v1.0/app/query/%s/queryapp/' % self.signid
         request = self.factory.get(url)
         print "query friend list request data", request.POST
         
@@ -363,7 +362,7 @@ class IotAuthTestCase(TestCase):
         
         
         ################ app remove friend ####################### 
-        url = '/iot/app/opt/%s/%s/del/' % (self.signid, user2.uuid.hex)
+        url = '/iot/v1.0/app/opt/%s/%s/del/' % (self.signid, user2.uuid.hex)
         request = self.factory.get(url)
         print "del friend  request data", request.POST
         
@@ -376,7 +375,7 @@ class IotAuthTestCase(TestCase):
         
         ########## test change ########
         
-        url = '/iot/app/%s/change/' % self.signid
+        url = '/iot/v1.0/app/%s/change/' % self.signid
         newdata = {'oldpass': 'aaaaaa',
                 'newpass':'12345678',
                 'phone':'13410103330',
@@ -415,7 +414,7 @@ class IotAuthTestCase(TestCase):
         self.signid = d['sign']   
 
         ###########  error for action #################
-        url = '/iot/app/opt/%s/%s/ddddd/' % (self.signid, user2.uuid.hex)
+        url = '/iot/v1.0/app/opt/%s/%s/ddddd/' % (self.signid, user2.uuid.hex)
         request = self.factory.get(url)
         response = AppAction(request, self.signid, dev.uuid.hex, 'ddddd')
         d = json.loads(response.content)
@@ -423,7 +422,7 @@ class IotAuthTestCase(TestCase):
         
         ################## error for uuid not exists #########
         nuuid = uuid.uuid4().hex
-        url = '/iot/app/opt/%s/%s/bind/' % (self.signid, nuuid)
+        url = '/iot/v1.0/app/opt/%s/%s/bind/' % (self.signid, nuuid)
         request = self.factory.get(url)
         response = AppAction(request, self.signid, nuuid, 'bind')
         print 'server bind not exists target response ', response.content
@@ -433,7 +432,7 @@ class IotAuthTestCase(TestCase):
         
         ################## error for uuid not exists #########
        
-        url = '/iot/app/opt/%s/%s/unbind/' % (self.signid, nuuid)
+        url = '/iot/v1.0/app/opt/%s/%s/unbind/' % (self.signid, nuuid)
         request = self.factory.get(url)
         response = AppAction(request, self.signid, nuuid, 'unbind')
         print 'server del not exists target response ', response.content
@@ -441,7 +440,7 @@ class IotAuthTestCase(TestCase):
         self.assertEqual(d['ok'], False)
         
        
-        url = '/iot/app/opt/%s/%s/add/' % (self.signid, nuuid)
+        url = '/iot/v1.0/app/opt/%s/%s/add/' % (self.signid, nuuid)
         request = self.factory.get(url)
         response = AppAction(request, self.signid, nuuid, 'add')
         print 'server add not exists target response ', response.content
@@ -449,7 +448,7 @@ class IotAuthTestCase(TestCase):
         self.assertEqual(d['ok'], False)
         
         
-        url = '/iot/app/opt/%s/%s/del/' % (self.signid, nuuid)
+        url = '/iot/v1.0/app/opt/%s/%s/del/' % (self.signid, nuuid)
         request = self.factory.get(url)
         response = AppAction(request, self.signid, nuuid, 'del')
         print 'server del not exists target response ', response.content
@@ -459,7 +458,7 @@ class IotAuthTestCase(TestCase):
         
         ########## test change ########
         
-        url = '/iot/app/%s/change/' % self.signid
+        url = '/iot/v1.0/app/%s/change/' % self.signid
         newdata = {'oldpass': 'dddsdddd',
                 'newpass':'12345678',
                 'phone':'13410103330',
@@ -485,9 +484,9 @@ class IotAuthTestCase(TestCase):
         data['key'] = 'aaaaaa'
 
        
-        request = self.factory.get('/iot/app/auth/?uuid=%s&key=%s' % (user.uname,'aaaaaa'), data, False)
+        request = self.factory.get('/iot/v1.0/app/auth/%s/%s/' % (user.uname,'aaaaaa'), data, False)
        
-        response = IotAppAuth(request)
+        response = IotAppAuth(request,user.uname,'aaaaaa')
         print "-----------------------------------------------------------"
         print 'server response', response.content;
         d = json.loads(response.content);
@@ -509,8 +508,8 @@ class IotAuthTestCase(TestCase):
         data = {}
         data ['uuid'] = dev.uuid.hex
         data['key'] = 'aaaaaa'
-        request = self.factory.get('/iot/dev/auth/?uuid=%s&key=aaaaaa' % dev.uuid.hex,data ,False)
-        response = IotDevAuth(request)
+        request = self.factory.get('/iot/v1.0/dev/auth/%s/aaaaaa/' % dev.uuid.hex,data ,False)
+        response = IotDevAuth(request,dev.uuid.hex,'aaaaaa')
         print "test DevAuth response",response
         d = json.loads(response.content);
         
@@ -598,20 +597,20 @@ class ShareTopicTestCase(TestCase):
             
         
     def test_ShareLink(self):
-        request = self.factory.get('/iot/app/auth/?uuid=%s&key=%s' % (self.uuid1,'aaaaaa'))
+        request = self.factory.get('/iot/v1.0/app/auth/%s/%s/' % (self.uuid1,'aaaaaa'))
        
-        response = IotAppAuth(request)
+        response = IotAppAuth(request,self.uuid1,'aaaaaa')
         print "login user response",response
         d = json.loads(response.content)
         self.assertEqual(d['ok'], True)   
         
         self.signid = d['sign']     
         ###  bind dev test ########
-        url = '/iot/app/opt/%s/%s/bind/' % (self.signid, self.devuuid1)
+        url = '/iot/v1.0/app/opt/%s/%s/bind/' % (self.signid, self.devuuid1)
         
         post_request = RequestFactory()
         post_request = post_request.post(url, json.dumps({'dkey':'aaaaaa'}), ConType)
-        post_request.__dict__['body'] = json.dumps({'dkey':'aaaaaa'})
+#         post_request.__dict__['body'] = json.dumps({'dkey':'aaaaaa'})
         response = AppAction(post_request, self.signid, self.devuuid1, 'bind')
         
         d = json.loads(response.content)
@@ -620,7 +619,7 @@ class ShareTopicTestCase(TestCase):
         self.createShareLink()
         
         ############# delete shared topic ###########
-        url = '/iot/app/%s/delshare/' % (self.signid)
+        url = '/iot/v1.0/app/%s/delshare/' % (self.signid)
         
         com = [
          {'users': [self.uuid1],'devs':[self.devuuid1],'topics':'*'},
@@ -656,7 +655,7 @@ class ShareTopicTestCase(TestCase):
         
         ################# share  devices link ################
         
-        url = 'iot/app/%s/%s/sharedev/' % (self.signid,self.devuuid1)
+        url = '/iot/v1.0/app/%s/%s/sharedev/' % (self.signid,self.devuuid1)
         post_request = RequestFactory()
         dd = {'topics':['wifi','poweroff','sleep']}
         post_request = post_request.post(url, json.dumps(dd), ConType)
@@ -664,15 +663,17 @@ class ShareTopicTestCase(TestCase):
         
         response = AppAction(post_request, self.signid, self.devuuid1, 'sharedev')
         
+        
+#         print "share devices link respoles ->>>>>>>>>>>>>> ",response.content
         d = json.loads(response.content)
         self.assertEqual(d['ok'], True) 
         
         slink = d['otp']
         ############## accept shared ################################
         
-        request = self.factory.get('/iot/app/auth/?uuid=%s&key=%s' % (self.uuid2,'aaaaaa'))
+        request = self.factory.get('/iot/v1.0/app/auth/%s/%s/' % (self.uuid2,'aaaaaa'))
        
-        response = IotAppAuth(request)
+        response = IotAppAuth(request,self.uuid2,'aaaaaa')
         print "login user response",response
         d = json.loads(response.content)
         self.assertEqual(d['ok'], True)   
@@ -680,7 +681,7 @@ class ShareTopicTestCase(TestCase):
         self.signid2 = d['sign']   
 
 
-        url = '/iot/app/opt/%s/%s/reqshare/' % (self.signid2, slink)
+        url = '/iot/v1.0/app/opt/%s/%s/reqshare/' % (self.signid2, slink)
         
         request = self.factory.get(url)
         

@@ -78,6 +78,8 @@ G_DATA = 'data'
 G_EXPIRE = 'expire'
 G_SRVS = 'srvs'
 G_VER = 'ver'
+G_RESCODE = 'rescode'
+G_SMS= 'sms'
 
 UnkownSignMethod = json.dumps({G_ERR:"UnkownSignMethod",
                 G_MSG:u"未知签名方法", G_OK:False}, ensure_ascii=False)
@@ -92,7 +94,8 @@ BindError = json.dumps({G_ERR:"BindError", G_MSG:u"已经绑定", G_OK:False}, e
 BindPWDError = json.dumps({G_ERR:"BindError", G_MSG:u"无权绑定", G_OK:False}, ensure_ascii=False)
 UserError = json.dumps({G_ERR:"UserError", G_MSG:u"用户名已存在", G_OK:False}, ensure_ascii=False)
 EmailError = json.dumps({G_ERR:"EmailError", G_MSG:u"邮箱已存在", G_OK:False}, ensure_ascii=False)
-PhoneError = json.dumps({G_ERR:"PhoneError", G_MSG:u"手机号已存在", G_OK:False}, ensure_ascii=False)
+PhoneExists = json.dumps({G_ERR:"PhoneExists", G_MSG:u"手机号已存在", G_OK:False}, ensure_ascii=False)
+PhoneError = json.dumps({G_ERR:"PhoneError", G_MSG:u"手机号无效", G_OK:False}, ensure_ascii=False)
 PwdError = json.dumps({G_ERR:"PwdError", G_MSG:u"用户或者密码错误", G_OK:False}, ensure_ascii=False)
 ArgError = json.dumps({G_ERR:"ArgError", G_MSG:u"参数错误", G_OK:False}, ensure_ascii=False)
 CaptchaError = json.dumps({G_ERR:"CaptchaError", G_MSG:u"验证码错误", G_OK:False}, ensure_ascii=False)
@@ -116,6 +119,18 @@ JsonType = 'application/json; charset=utf-8'
 ReturnOK = HttpResponse(json.dumps({G_OK:True}),content_type = JsonType)
 
 
+def CheckPOSTParameters(func):
+    def wrapper(request,*args):
+        args = args + (request,)
+        if request.body:
+            try:
+                return func(json.loads(request.body.decode('utf-8')),*args)
+            except ValueError:
+                pass
+        return HttpResponse(ArgError, content_type=JsonType)
+
+    return wrapper;
+
 # Create your views here.
 
 def HttpReturn(ret,ctx = JsonType):
@@ -124,6 +139,7 @@ def HttpReturn(ret,ctx = JsonType):
 
 def get_verify_code(request):
     txt, img = captcha.get_code()
+    print "txt",txt
     request.session[request.COOKIES.get(G_CSRFTOKEN)] = txt
 #     data = AppUser.objects.all()[0].avatar
 #     return HttpResponse(base64.b64decode(data), content_type='image/png')
@@ -153,10 +169,10 @@ def QueryCert(request,token,ipaddr):
         
     
 
-def PreCheckRequest(request, obj, data):   
+def PreCheckRequest(request, obj, rawpwd):   
 #     print len(data),data;
 #     signMethod = data.get('signMethod','')
-    rawpwd = data.get(G_KEY, '')
+#     rawpwd = data.get(G_KEY, '')
 #     print "request key", rawpwd,obj.key
     if not check_password(rawpwd, obj.key):
         return HttpReturn(UnAuth)
@@ -203,6 +219,7 @@ def PreCheckRequest(request, obj, data):
  
 #     print "request",request.META   
 #     print "request",request.path
+
     if 'dev' in request.path:
         DevicesLoginHistory.objects.create(devices=obj, inout=True, ipaddr=ipaddr)
     else:
@@ -210,25 +227,12 @@ def PreCheckRequest(request, obj, data):
         retdict[G_UUID] = obj.uuid.hex
     return HttpReturn(json.dumps(retdict))
 
-def IotAppAuth(request):
-    data = request.POST
-    
-    if not data:
-        data = request.GET
-        
-    token = data.get(G_UUID, '')
-    key = data.get(G_KEY, '')
-#     sign = data.get('sign','')
-    obj = None;
-    if not token or not key:
-        return HttpReturn(DataMiss)
-    
-#     t = time.time()
-#     Person.objects.raw('SELECT * FROM myapp_person WHERE last_name = %s', [lname])
+# @CheckLoginParameters
+def IotAppAuth(request,account,pwd):
     try:
-        val = UUID(token, version=4)
+        val = UUID(account, version=4)
         obj = AppUser.objects.raw('SELECT * FROM user_manager_appuser where uname = %s OR email = %s OR uuid = %s OR phone= %s',
-                                  [token,token,token,token])[0]
+                                  [account,account,account,account])[0]
     except (ObjectDoesNotExist,IndexError) as e:
         return HttpReturn(UserNotExists)
     except ValueError:
@@ -236,7 +240,7 @@ def IotAppAuth(request):
         # is not a valid hex code for a UUID.
         try:
             obj = AppUser.objects.raw('SELECT * FROM user_manager_appuser where uname = %s OR email = %s  OR phone= %s',
-                                  [token,token,token])[0]
+                                  [account,account,account])[0]
         except:
             return HttpReturn(UserNotExists)
             
@@ -248,40 +252,29 @@ def IotAppAuth(request):
 
     
     
-    return PreCheckRequest(request, obj, data)
+    return PreCheckRequest(request, obj,pwd)
     
     
 
 
-def IotDevAuth(request):
-    data = request.POST
-    
-    if not data:
-        data = request.GET
-    key = data.get(G_KEY, '')
-    uuid = data.get(G_UUID, '')
-    
-    if not uuid or not key:
-        return HttpReturn(DataMiss)
-    obj = None    
+def IotDevAuth(request,account,pwd):
     try:
-        obj = Devices.objects.get(uuid=uuid)
+        obj = Devices.objects.get(uuid=account)
     except (ObjectDoesNotExist,ValueError) as e:
         return HttpReturn(UserNotExists)
         
-    return PreCheckRequest(request, obj, data)
+    return PreCheckRequest(request, obj, pwd)
 
-
-def IotAppRegister(request):
-    data = request.POST
-    if not data:
-        data = request.GET
-        
+@CheckPOSTParameters
+def IotAppRegister(data,*args):
+    # {"name":"test3","email":"yjdwbj@gmail.com","phone":"15916203772","key":123456,"captcha":123456}
+    request = args[0]
     email = data.get(G_EMAIL, None)
     uname = data.get(G_NAME, None)
     phone = data.get(G_PHONE, None)
     key = data.get(G_KEY, None)
     captcha = data.get(G_CAPTCHA, None)
+#     print "data is ",data
 #     print "my captcha", request.session.pop(request.COOKIES.get(G_CSRFTOKEN))
     
     mycaptcha = None
@@ -289,7 +282,7 @@ def IotAppRegister(request):
         mycaptcha = request.session.pop(request.COOKIES.get(G_CSRFTOKEN))
     except KeyError:
         pass
-        
+         
     if captcha:
         if cmp(mycaptcha, captcha):
             return HttpReturn(CaptchaError)
@@ -307,12 +300,18 @@ def IotAppRegister(request):
         return HttpReturn(ArgError)
         
     if phone:
+        if len(phone) != 11:
+            return HttpReturn(PhoneError)
+        try:
+            int(phone)
+        except:
+            return HttpReturn(PhoneError)
         try:
             tmp = AppUser.objects.get(phone=phone)
         except :
             pass
         else:
-            return HttpReturn(PhoneError)
+            return HttpReturn(PhoneExists)
     else:
         return HttpReturn(ArgError, content_type=JsonType)
         
@@ -325,6 +324,10 @@ def IotAppRegister(request):
             return HttpReturn(EmailError)
     else:
         return HttpReturn(ArgError)
+    
+    if not key:
+        return HttpReturn(ArgError)
+        
     
     ### 注册成功,验证手机激活帐号#####
     sendsms_code= hashlib.md5(phone + str(time.time())).hexdigest().upper()
@@ -380,19 +383,9 @@ def IotPing(request,token):
     redis_pool.expire(token, settings.SESSION_COOKIE_AGE)
     return ReturnOK
         
-def GetRequestBody(request):
-    if request.body:
-        try:
-            return json.loads(request.body.decode('utf-8'))
-        except ValueError:
-#             print "出错了............................."
-#             print "request.body", request.body
-            return None
-    else:
-        return None
 
 @transaction.atomic
-def CheckBindDev(request, key, dev_uuid, user):
+def CheckBindDev(key, dev_uuid, user):
 #     print "check bind dev ",key,dev_uuid,user
 #     print "dev_uuid key ", dev_uuid.key
     
@@ -430,11 +423,9 @@ def CheckBindDev(request, key, dev_uuid, user):
     else:
         return HttpReturn(BindError)  # 已经绑定了
 
-
-def AppCheckBindDev(request,user,uuid):
-    body = GetRequestBody(request)
-    if not body:
-        return HttpResponse(ArgError, content_type=JsonType)
+@CheckPOSTParameters
+def AppCheckBindDev(body,*args):
+    user,uuid,request = args
     dev_key = body.get(G_DKEY, '')
     try:
         dev_uuid = Devices.objects.get(uuid=uuid)
@@ -450,19 +441,10 @@ def AppCheckBindDev(request,user,uuid):
         bound = False
     return HttpReturn(json.dumps({G_OK:True, "bound": bound}))
 
+@CheckPOSTParameters
 @transaction.atomic
-def AppBindDev(request, user, uuid):
-   
-#     print "request POST",request.POST
-#     for (k,v) in request.__dict__.items():
-#         if k != 'META' and k != 'environ':
-#             print "key:",k,"value is  ------------->",v
-    
-    body = GetRequestBody(request)
-#     print "body is", body
-    if not body:
-        return HttpReturn(ArgError)
-    
+def AppBindDev(body, *args):
+    user,uuid,request = args
     ipaddr, ok = IpAddress.objects.get_or_create(ipaddr=request.META.get(G_REMOTE_ADDR))    
     try:
         dev_uuid = Devices.objects.get(uuid=uuid)
@@ -487,10 +469,10 @@ def AppBindDev(request, user, uuid):
                                        regip=ipaddr,
                                        regtime=timezone.now())
                 dev_uuid.save()
-                return CheckBindDev(request, body.get(G_DKEY, ''), dev_uuid, user)
+                return CheckBindDev(body.get(G_DKEY, ''), dev_uuid, user)
                  
     else:
-        return CheckBindDev(request, body.get(G_DKEY, ''), dev_uuid, user)
+        return CheckBindDev(body.get(G_DKEY, ''), dev_uuid, user)
 
     
 @transaction.atomic
@@ -641,10 +623,11 @@ def AppGetMySharedOut(request,owner):
 #     filter_qs = Q()
     shardict = {}
     for x in lst:
-#         print "bind dev",x
+        print "bind dev",x,"owner id",owner.uuid.hex,owner.uname
         topics = MqttAcl.objects.filter(Q(topic__startswith = "/%s" % x) & ~Q(app=owner) & ~Q(dev_id=x))
+#         print "topics ",topics
         for y in topics:
-#             print "my shared topic",y
+            print "my shared topic",y,y.app_id,y.dev_id,y.topic
             tlist = y.topic.split("/")[1:-1] # /uuid/# --> uuid
             dev = tlist[0]
             uid = y.app_id.hex
@@ -660,16 +643,20 @@ def AppGetMySharedOut(request,owner):
                 l[uid] = set()
                 l[uid].add(tlist[1])
                 shardict[dev] = l
+    
         
     return HttpReturn(json.dumps({G_OK:True,G_DATA:shardict},default=set_default))
     
-
-def AppDelShareDev(request,owner):
+@CheckPOSTParameters
+def AppDelShareDev(deldict,*args):
     USERS = 'users'
     TOPICS = "topics"
     DEVS="devs"
     ALL = "*"
-    deldict = GetRequestBody(request)
+    owner,_ = args
+#     deldict = GetRequestBody(request)
+#     print "owner is ",owner.uname ,owner.uuid.hex
+#     print "deldict",deldict
     if not deldict or not all(x in deldict for x in [USERS,TOPICS,DEVS]):
         return HttpReturn(ArgError)
     
@@ -684,9 +671,9 @@ def AppDelShareDev(request,owner):
             
         
         def deleteTopic(user,dev):
-                txt = '/%s' % (dev)
+                txt = '/%s/' % (dev)
 #                 print "{'users':[...],G_TOPICS:all,'devs':*",txt
-                MqttAcl.objects.filter(app_id = user,topic__contains = txt).delete()
+                MqttAcl.objects.filter(app_id = user,topic__contains = txt).filter(~Q(topic__contains ='/%s/#' % dev)).delete()
         if isinstance(deldict[TOPICS],list):
             if isinstance(deldict[DEVS],list):
                 # {'users':[...],G_TOPICS:[...],'devs':[...]}
@@ -727,33 +714,38 @@ def AppDelShareDev(request,owner):
                 [deleteTopic(dev,topic) for dev in lst2 for topic in deldict[TOPICS]]
                 
             else:
-                # {'users':'all',G_TOPICS:[...],'devs':'all'}
+                # {'users':'*',G_TOPICS:[...],'devs':'*'}
                 
                 [deleteTopic(dev.devid_id.hex,topic) for dev in devices for topic in deldict[TOPICS]]
  
         else:
             if isinstance(deldict[DEVS],list):
-                # {'users':'all',G_TOPICS:'all','devs':[...]}
+                # {'users':'*',G_TOPICS:'*','devs':[...]}
+                print "devices is ",devices  
                 lst1 = [u.devid_id.hex for u in devices]
                 lst2 =list(set(lst1).intersection(set(deldict[DEVS])))
+                print "list 2 is ",lst2
                 for dev in lst2: 
-                    txt = '/%s' % (dev)
+                    txt = '/%s/' % (dev)
+                    
 #                     print " {'users':'all',G_TOPICS:'all','devs':[...]}",txt
-                    MqttAcl.objects.filter(topic__contains=txt).delete()
+                    MqttAcl.objects.filter(topic__contains=txt).filter(~Q(topic__contains ='/%s/#' % dev)).delete()
                         
             else:
                 # {'users':'all',G_TOPICS:'all','devs':'all'}
 #                 devices = AppBindDevList.objects.filter(appid = user)
                 
                 for dev in devices:
-                    txt = '/%s' % (dev.devid_id.hex)
-#                     print "{'users':'all',G_TOPICS:'all','devs':'all'}",txt
-                    MqttAcl.objects.filter(topic__contains=txt).delete()
+                    txt = '/%s/' % (dev.devid_id.hex)
+#                     print "{'users':'*',G_TOPICS:'*','devs':'*'}",txt
+                    MqttAcl.objects.filter(topic__contains=txt).filter(~Q(topic__contains ='/%s/#' % dev)).delete()
     
     return ReturnOK
                     
-
-def AppShareDev(request, user, devuuid):
+@CheckPOSTParameters
+def AppShareDev(body,*args):
+    user,devuuid,_ = args
+#     print "share devices ----------  ",user,devuuid
     try:
 #         results = AppBindDevList.objects.raw("SELECT devid_id from bindlist WHERE appid_id = %s AND devid_id=%s",
 #                                          [user.uuid.hex,devuuid])
@@ -766,11 +758,12 @@ def AppShareDev(request, user, devuuid):
 
     otpuuid = uuid.uuid4().hex
     
-    body = GetRequestBody(request)
+#     body = GetRequestBody(request)
+#     print "------ >type body is",type(body)
     if not body or not isinstance(body,dict):
         return HttpReturn(ArgError)
     topics = body.get(G_TOPICS,None)
-#     print "share topics is ",topics
+#     print "----------- >share topics is ",topics
     ## 检查topics 是否为空,是否是为列表类型,是否全部为真.
     if not topics or  not isinstance(topics,list):
         return HttpReturn(ArgError)
@@ -829,7 +822,7 @@ def AppVerifyPhone(request, Md5sum, smscode):
     if G_REGISTER in adict:
         AppUser.objects.create(email =adict[G_EMAIL],
                                phone = adict[G_PHONE],
-                               key = make_password(adict[G_KEY]),
+                               key = adict[G_KEY],
                                uname = adict[G_UNAME],
                                uuid = adict[G_UUID],
                                regtime = timezone.now(),
@@ -862,6 +855,7 @@ actionFunc = {'bind':AppBindDev,
               'reqshare':AcceptBindLink,
               'sharedev':AppShareDev,
               }
+
 
 
 def AppAction(request, token, target, action):
@@ -906,11 +900,10 @@ def AppGetAvatar(request,user):
     return HttpResponse(base64.b64decode(user.avatar),content_type=user.get_mimetype)        
 
 
-def AppUserChange(request, user):
-    body = GetRequestBody(request)
-    if not body:
-        return HttpReturn(ArgError)
-    
+@CheckPOSTParameters
+def AppUserChange(body, *args):
+
+    user,_ = args
     oldpass = body.get(G_OLDPASS, None)
     
 #     if cmp(oldpass,user.key):   #### 修改信息必须要用原密码
@@ -918,26 +911,38 @@ def AppUserChange(request, user):
         return HttpReturn(PwdError)
     newpass = body.get(G_NEWPASS, None)
 #
+    if G_PHONE in body:
+        if G_RESCODE not in body or G_SMS not in body :
+            return HttpReturn(UnAuth)
+        
+        adict = redis_pool.hgetall(body.get(G_RESCODE,''))
+        if not adict or  not all(x in adict for x in [G_PHONE,G_SMS]):
+            return HttpReturn(UnAuth)
+        if cmp(adict.get(G_PHONE,None), body.get(G_PHONE)) or\
+            cmp(adict.get(G_SMS,None), body.get(G_SMS)):
+            return HttpReturn(CaptchaError)
+        
+
     for k,v in body.items():
-        if k in [G_EMAIL,'nickname',G_PHONE,'sex']:
+        if k in [G_EMAIL,'nickname',G_PHONE,'sex',G_UNAME]:
 #             print k, " set value ",type(v)
             setattr(user,k,v)
-        if k == G_PHONE:  ### 更改了手机要重新激活帐号
-            setattr(user,"phone_active",False)
+#         if k == G_PHONE:  ### 更改了手机要重新激活帐号
+#             
+#             setattr(user,"phone_active",False)
     if newpass:
 #         print "set newpass ",newpass
         user.key = make_password(newpass)
     
     user.save()
     
+    
+    
     return ReturnOK
 
 
 
 def ChangeDevName(request,token,newname):
-#     body = GetRequestBody(request)
-#     if not body or not body.get('name',None):
-#         return HttpReturn(ArgError)
     
     devuuid = redis_pool.hget(token,G_UUID)
    
@@ -978,12 +983,25 @@ def AppRsyncData(request,user):
 def AppGetInfo(request,user):
     return HttpReturn(json.dumps({G_OK:True,"info":user.as_json()}))
     
- 
-def AppSyncData(request, user):
-    body = GetRequestBody(request)
-    if not body:
-        return HttpReturn(ArgError)
+@CheckPOSTParameters
+def AppSetKey(body,*args):
+    user,_ = args
+    user.dkey =bytes(body.get(G_KEY,''))
+    user.save()
+    return ReturnOK
+
+
+def AppGetKey(body,user):
+    return HttpReturn(json.dumps({G_OK:True,
+                                  G_KEY: bytes(user.dkey)}))
+    
+@CheckPOSTParameters
+def AppSyncData(body,*args):
+#     body = GetRequestBody(request)
+#     if not body:
+#         return HttpReturn(ArgError)
 #     print "-----------------------sync body is",body,type(user)
+    user,_ = args
     user.data = body
     user.save()
     return ReturnOK
@@ -1045,7 +1063,7 @@ def AppSendSms(request, account):
         return HttpReturn(json.dumps({G_OK:True, 'rescode':resetcode}))
     else:
         if state in ErrDict:
-            errobj = SmsErrorTable.objects.get(errcode=state)
+            errobj,ok = SmsErrorTable.objects.get_or_create(errcode=state)
             SmsErrorLog.objects.create(errcode=errobj, ipaddr=ipobj,
                                        addtime=timezone.now(), phone=adict[G_PHONE])
         if state == 10006 or state == 10007 or state == 10005:
@@ -1059,6 +1077,8 @@ QueryFunc = {'querydev':AppQueryDev,
              'queryapp':AppQueryApp,
              'sync':AppSyncData,
              'rsync':AppRsyncData,
+             'setkey':AppSetKey,
+             'getkey':AppGetKey,
              'getinfo':AppGetInfo,
              'change':AppUserChange,
              'setavatar':AppSetAvatar,

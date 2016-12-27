@@ -78,7 +78,8 @@ class DevicesAdmin(MyCustomAdmin):
     
 
 class AppUserAdmin(MyCustomAdmin):
-    list_display = ('uname','uuid','email','phone','view_ip','regtime','phone_active','sex','nickname','view_avatar')
+    list_display = ('uname','uuid','email','phone','view_ip','regtime','phone_active','sex',
+                    'nickname','view_avatar')
     
 #     def __init__(self,*args,**kwargs):
 #         super(AppUserAdmin,self).__init__(*args,**kwargs)

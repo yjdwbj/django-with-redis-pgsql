@@ -15,6 +15,7 @@ from django.core.files.uploadedfile import InMemoryUploadedFile
 # Create your models here.
 
 from django.contrib.auth.hashers import PBKDF2SHA1PasswordHasher
+# from django.contrib.auth.hashers import PBKDF2PasswordHasher
 from django.contrib.auth.hashers import UNUSABLE_PASSWORD_PREFIX,UNUSABLE_PASSWORD_SUFFIX_LENGTH
 from django.utils.crypto import (
     constant_time_compare, get_random_string, pbkdf2,
@@ -83,6 +84,7 @@ class AppUser(models.Model):
     nickname = models.CharField(null=True,default=u"新用户",max_length=64,verbose_name=u'昵称')
     sex = models.IntegerField(choices=GENDER_CHOICES,default=0,verbose_name=u'性别')
     avatar = models.BinaryField(verbose_name=u'头像')
+    dkey = models.BinaryField(verbose_name=u'小机密码')
     
     
     def __unicode__(self):
@@ -110,13 +112,16 @@ class AppUser(models.Model):
         
     def save(self, *args, **kw):
 #         print "my self key ",self.key
-        if self.pk is not None:
-            try:
-                orig = AppUser.objects.get(pk=self.pk)
-                if orig.key != self.key:
-                    self.key = make_password(self.key)
-            except ObjectDoesNotExist:
-                self.key = make_password(self.key)
+        if self.key.count('$') != 3:
+            self.key = make_password(self.key)
+#         if self.pk is not None:
+#             try:
+#                 orig = AppUser.objects.get(pk=self.pk)
+#                 print "orig key is",orig.key
+#                 if orig.key != self.key and self.key.count('$') != 3:
+#                     self.key = make_password(self.key)
+#             except ObjectDoesNotExist:
+#                 self.key = make_password(self.key)
         super(AppUser, self).save(*args, **kw)
         
 
@@ -189,13 +194,15 @@ class Devices(models.Model):
     
     def save(self, *args, **kw):
 #         print "my self key ",self.key
-        if self.pk is not None:
-            try:
-                orig = Devices.objects.get(pk=self.pk)
-                if orig.key != self.key:
-                    self.key = make_password(self.key)
-            except ObjectDoesNotExist:
-                self.key = make_password(self.key)
+        if self.key.count('$') != 3:
+            self.key = make_password(self.key)
+#         if self.pk is not None:
+#             try:
+#                 orig = Devices.objects.get(pk=self.pk)
+#                 if orig.key != self.key and self.key.count('$') != 3:
+#                     self.key = make_password(self.key)
+#             except ObjectDoesNotExist:
+#                 self.key = make_password(self.key)
         super(Devices, self).save(*args, **kw)
        
         
