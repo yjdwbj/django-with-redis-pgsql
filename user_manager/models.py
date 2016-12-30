@@ -20,6 +20,8 @@ from django.contrib.auth.hashers import UNUSABLE_PASSWORD_PREFIX,UNUSABLE_PASSWO
 from django.utils.crypto import (
     constant_time_compare, get_random_string, pbkdf2,
 )
+import warnings
+warnings.filterwarnings("ignore")
 
 class MyPBKDF2PasswordHasher(PBKDF2SHA1PasswordHasher):
     """
@@ -60,6 +62,40 @@ class IpAddress(models.Model):
     
     def __unicode__(self):
         return self.ipaddr
+    
+    
+class ImageFileField(models.FileField):
+    def __init__(self,max_upload_size=102410,*args, **kwargs):
+        self.max_upload_size = max_upload_size
+        self.attr_class.bindata = None
+        self.fmt = ['JPEG','PNG','GIF']
+        kwargs['help_text'] = u"只支持JPEG,PNG,GIF格式"
+        super(ImageFileField, self).__init__(*args, **kwargs)
+        
+    def clean(self,*args,**kwargs):
+       
+        data = super(ImageFileField,self).clean(*args,**kwargs)
+        self.attr_class.bindata = data.file.file.read()
+        btype = magic.Magic().id_buffer(self.attr_class.bindata)
+#     print "data len: ",datalen,"type is",btype
+        
+        if not any(ext in btype for ext in self.fmt):
+            raise ValidationError(self.help_text)
+        if data.file.size > self.max_upload_size:
+            raise ValidationError(u'文件超过%sK' % self.max_upload_size/1024)
+#         print "upload data is ",type(data),data
+        return data
+        
+    def db_type(self,connection):
+        return 'bytea'
+    
+    
+    def from_db_value(self, value, expression, connection, context):
+#         print "value is ",value
+        if value is None:
+            return value or u""
+        return  value
+    
 
 class AppUser(models.Model):
     class Meta:
@@ -83,7 +119,7 @@ class AppUser(models.Model):
     phone_active = models.BooleanField(default=False,verbose_name=u'手机已验证')
     nickname = models.CharField(null=True,default=u"新用户",max_length=64,verbose_name=u'昵称')
     sex = models.IntegerField(choices=GENDER_CHOICES,default=0,verbose_name=u'性别')
-    avatar = models.BinaryField(verbose_name=u'头像')
+    avatar =ImageFileField(verbose_name=u'头像')
     dkey = models.BinaryField(verbose_name=u'小机密码')
     
     
@@ -114,6 +150,8 @@ class AppUser(models.Model):
 #         print "my self key ",self.key
         if self.key.count('$') != 3:
             self.key = make_password(self.key)
+        if self.avatar.bindata:
+            self.avatar =base64.b64encode(self.avatar.bindata)
 #         if self.pk is not None:
 #             try:
 #                 orig = AppUser.objects.get(pk=self.pk)
@@ -225,21 +263,6 @@ class DevicesLoginHistory(models.Model):
         return self.devices.uuid.hex
     get_uuid.short_description = u'唯一码UUID'
         
-# class ShareLink(models.Model):
-#     class Meta:
-#         verbose_name = u'分享链接'
-#         verbose_name_plural=verbose_name
-#         db_table = 'share_request'
-#         
-#     sharer = models.ForeignKey(AppUser,editable = False,on_delete = models.CASCADE ,
-#                                null = False,verbose_name = u'分享者')
-#     
-# #     guest = models.ForeignKey(AppUser,editable = False,on_delete = models.CASCADE,
-# #                               related_name = 'guest_user')
-#     sharedev = models.ForeignKey(Devices,editable = False,on_delete = models.CASCADE,
-#                                 null = False,verbose_name = u'设备')
-#     otpuuid = models.UUIDField(verbose_name = u'一次性ID')
-#     bodydata = JSONField(verbose_name = u'数据')
     
 class SharedDevList(models.Model):
     class Meta:
@@ -255,10 +278,6 @@ class SharedDevList(models.Model):
     sdevice = models.ForeignKey(Devices,editable = False,on_delete= models.CASCADE,null=False,
                             verbose_name =u'设备')
     topics = JSONField(verbose_name=u'分享主题')
-    
-    
-#     isshared = models.BooleanField(default = False,verbose_name=u'分享成功?')
-#     topic = models.CharField(max_length=256,blank=False,verbose_name=u"主题")
     
     def __unicode__(self):
         return str(self.guest_id)
@@ -277,10 +296,6 @@ class AppBindDevList(models.Model):
     def __unicode__(self):
         return str(self.appid.uuid)
     
-    
-    
-#     def get_dev(self):
-#         return self.devid.devid
     
     
 class AppFriendList(models.Model):
@@ -335,21 +350,9 @@ class MqttAcl(models.Model):
 
     
     
-class MqttUser(models.Model):
-    class Meta:
-        verbose_name = u'用户'
-        db_table = "mqtt_user"
-        verbose_name_plural = verbose_name
-    is_superuser = models.BooleanField(default=False,verbose_name=u'超级用户')
-    username = models.CharField(primary_key = True,max_length=64,unique=True,verbose_name=u'用户ID');
-    password = models.CharField(max_length=64,verbose_name=u'用户密码')
-    salt = models.CharField(max_length=32,null=True,verbose_name=u'加盐')
-    
-    def __unicode__(self):
-        return self.uuid
   
 
- ##　这种?#要dd 
+
 class BinaryFileField(models.FileField):
     def __init__(self,max_upload_size=2048,*args, **kwargs):
         self.max_upload_size = max_upload_size
@@ -359,6 +362,7 @@ class BinaryFileField(models.FileField):
     def clean(self,*args,**kwargs):
         data = super(BinaryFileField,self).clean(*args,**kwargs)
         readlines =data.file.readlines()
+        readlines = [x for x in readlines if x.rstrip()]
 #         self.attr_class.bindata = ''.join(readlines[1:-1])
         import zlib
         setattr(data,'bindata',zlib.compress(''.join([x.replace('\n','') for x in readlines[1:-1]]),9))

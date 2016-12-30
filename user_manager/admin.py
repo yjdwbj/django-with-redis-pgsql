@@ -87,9 +87,10 @@ class AppUserAdmin(MyCustomAdmin):
 
     def view_avatar(self,obj):
         if len(obj.avatar) > 0:
-            rawdata = base64.b64decode(obj.avatar)
-            btype = magic.Magic().id_buffer(rawdata)
+            rawdata = obj.avatar
+            btype = magic.Magic().id_buffer(bytes(rawdata))
 #             return HttpResponse(rawdata, content_type='image/%s' % btype.split(' ')[0].lower())
+#             return "eeeee"
             return format_html('<img alt="avatar Image" src="data:image/%s;base64,%s" style="width:64px;height:64px;" />' %  (btype.split(' ')[0].lower(),obj.avatar))
         
     

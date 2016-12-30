@@ -46,9 +46,9 @@ import mimetypes
 
 import magic
 from django.db import connection, transaction
+from . import ffi,nettle
 
-
-from django.contrib.auth.hashers import check_password
+# from django.contrib.auth.hashers import check_password
 
 
 G_OLDPASS = 'oldpass'
@@ -119,9 +119,33 @@ JsonType = 'application/json; charset=utf-8'
 ReturnOK = HttpResponse(json.dumps({G_OK:True}),content_type = JsonType)
 
 
+def check_password(rawpwd,encoded):
+    algorithm, iterations, salt, bhash = encoded.split('$', 3)
+    klen = len(rawpwd)
+    slen = len(salt)
+    #key = ffi.new("uint8_t[]"  ,list(rawpwd))
+    #s = ffi.new("uint8_t[]" ,list(salt))
+    key = ffi.new("uint8_t[]"  ,bytes(rawpwd))
+    s = ffi.new("uint8_t[]" ,bytes(salt))
+
+    buf = ''
+    if algorithm == 'pbkdf2_sha1':
+        buf = ffi.new("uint8_t[20]")
+        nettle.nettle_pbkdf2_hmac_sha1(klen,key,int(iterations),slen,s,20,buf)
+    else:
+        buf = ffi.new("uint8_t[32]")
+        nettle.nettle_pbkdf2_hmac_sha256(klen,key,int(iterations),slen,s,32,buf)
+
+    return  base64.b64encode(ffi.string(buf)).decode('utf-8') == bhash
+
+
+
+
+
 def CheckPOSTParameters(func):
     def wrapper(request,*args):
         args = args + (request,)
+#         print "args",args
         if request.body:
             try:
                 return func(json.loads(request.body.decode('utf-8')),*args)
@@ -189,16 +213,7 @@ def PreCheckRequest(request, obj, rawpwd):
 #         retdict[G_VER] = None
     else:
         srvobj = SrvList.objects.get(ipaddr=srvipaddr[0])
-        ### 这里新的不再返回服务器的证
-#         resflag = data.get('resFlag', 'all')
-#         if not cmp(resflag, 'ip'):
-#             retdict['servers'] = ':'.join([srvobj.ipaddr, str(srvobj.port)])  
-#         elif not cmp(resflag, 'cert'):
-#             retdict['pubkey'] = base64.b64encode(srvobj.pubkey)
-#         else:
-#             retdict['servers'] = ':'.join([srvobj.ipaddr, str(srvobj.port)])
-#             retdict['pubkey'] = base64.b64encode(srvobj.pubkey) 
-#         retdict[G_VER] = srvobj.mver
+
         retdict[G_SRVS] = ':'.join([srvobj.ipaddr, str(srvobj.port)])
     retdict['time'] = str(int(time.time()))
     retdict[G_EXPIRE] = settings.SESSION_COOKIE_AGE
@@ -216,9 +231,6 @@ def PreCheckRequest(request, obj, rawpwd):
     redis_pool.hmset(hkey, {G_PASSWORD: hashlib.sha256(rawpwd).hexdigest(),
                              G_IPADDR: ipaddr.ipaddr, G_UUID: obj.uuid.hex})
     redis_pool.expire(hkey, settings.SESSION_COOKIE_AGE)
- 
-#     print "request",request.META   
-#     print "request",request.path
 
     if 'dev' in request.path:
         DevicesLoginHistory.objects.create(devices=obj, inout=True, ipaddr=ipaddr)
@@ -227,7 +239,7 @@ def PreCheckRequest(request, obj, rawpwd):
         retdict[G_UUID] = obj.uuid.hex
     return HttpReturn(json.dumps(retdict))
 
-# @CheckLoginParameters
+
 def IotAppAuth(request,account,pwd):
     try:
         val = UUID(account, version=4)
@@ -273,21 +285,14 @@ def IotAppRegister(data,*args):
     uname = data.get(G_NAME, None)
     phone = data.get(G_PHONE, None)
     key = data.get(G_KEY, None)
-    captcha = data.get(G_CAPTCHA, None)
+    captcha = str(data.get(G_CAPTCHA, None))
 #     print "data is ",data
 #     print "my captcha", request.session.pop(request.COOKIES.get(G_CSRFTOKEN))
+
+    mycaptcha = request.session.pop(request.COOKIES.get(G_CSRFTOKEN),None)
     
-    mycaptcha = None
-    try:
-        mycaptcha = request.session.pop(request.COOKIES.get(G_CSRFTOKEN))
-    except KeyError:
-        pass
-         
-    if captcha:
-        if cmp(mycaptcha, captcha):
+    if not mycaptcha or cmp(mycaptcha, captcha):
             return HttpReturn(CaptchaError)
-    else:
-        return HttpReturn(ArgError)
     
     if uname:
         try:
@@ -385,11 +390,11 @@ def IotPing(request,token):
         
 
 @transaction.atomic
-def CheckBindDev(key, dev_uuid, user):
+def CheckBindDev(key, dev_uuid, user_id):
 #     print "check bind dev ",key,dev_uuid,user
 #     print "dev_uuid key ", dev_uuid.key
     
-    if not check_password(key, dev_uuid.key):
+    if not check_password(str(key), dev_uuid.key):
         return HttpResponse(PwdError,
                                 content_type=JsonType)
     devuidhex = None
@@ -402,22 +407,22 @@ def CheckBindDev(key, dev_uuid, user):
     except (ObjectDoesNotExist,ValueError) as e :
         topic,ok =  MqttTopics.objects.get_or_create(topic="/%s/#" % devuidhex)
         MqttAcl.objects.get_or_create(allow=1, ipaddr=None, clientid=None,
-                                         app =user,
+                                         app_id =user_id,
                                         access=3, topic="/%s/#" % devuidhex)
         MqttAcl.objects.get_or_create(allow=1, ipaddr=None, clientid=None,
                                          dev_id =devuidhex,
                                       access=3, topic="/%s/#" % devuidhex)
         
         
-        topic,ok =  MqttTopics.objects.get_or_create(topic="/%s/#" % user.uuid.hex)
+        topic,ok =  MqttTopics.objects.get_or_create(topic="/%s/#" % user_id)
 #         MqttAcl.objects.get_or_create(allow=1, ipaddr=None, clientid=None,
 #                                          app =user.uuid.hex,
 #                                          access=3, topic=topic)
         MqttAcl.objects.get_or_create(allow=1, ipaddr=None, clientid=None, 
                                          dev_id =devuidhex,
-                                         access=3, topic="/%s/#" % user.uuid.hex)
+                                         access=3, topic="/%s/#" % user_id)
         
-        AppBindDevList.objects.create(appid=user, devid=dev_uuid)
+        AppBindDevList.objects.create(appid_id=user_id, devid=dev_uuid)
         
         return ReturnOK
     else:
@@ -483,22 +488,19 @@ def AppDropDev(request, user, target):
         return HttpReturn(TargetNotExists)
     else:
         # 删除绑定,同时删除ＡＣＬ,这里对于数据库要用到事务.
-        try:                    
+                   
 #             MqttAcl.objects.filter(username=user.uuid.hex, topic="/%s/#" % target).delete()
 #             MqttAcl.objects.filter(app=user.uuid.hex, topic="/%s/#" % target).delete()   
-            MqttAcl.objects.filter(app=user.uuid.hex, topic__iexact="/%s/#" % target).delete()
-        except :
-            pass
-        
-        try:                    
+#         print("delete target is ",target)
+#         lst = MqttAcl.objects.filter(topic__startswith="/%s/" % target)
+#         for i in lst:
+#             print("del topic ",i.topic)
+        MqttAcl.objects.filter(topic__startswith="/%s/" % target).delete()
+     
 #             MqttAcl.objects.filter(username=target, topic='/%s/#' % user.uuid.hex).delete()
-            MqttAcl.objects.filter(dev=target, topic='/%s/#' % user.uuid.hex).delete()    
-        except :
-            pass
-        try:
-            AppBindDevList.objects.get(appid=user, devid=dev_uuid).delete()
-        except :
-            pass
+        MqttAcl.objects.filter(dev_id=target).delete()    
+        AppBindDevList.objects.filter(appid_id=user, devid=dev_uuid).delete()
+      
         return ReturnOK     
     
 
@@ -542,14 +544,13 @@ def IotDevActive(request,account,pwd):
 
 @transaction.atomic
 def AcceptBindLink(request, user, uuid):
-#     print "accept user %s to bind uuid %s" % (user.uuid.hex, uuid)
     shared_keys = redis_pool.hgetall(uuid)
 #     print "shared_keys",shared_keys,"type",type(shared_keys)
    
     if not shared_keys:
         return HttpReturn(UnAuth)
     
-    if user.uuid.hex == shared_keys[G_APPID]:
+    if user == shared_keys[G_APPID]:
         return HttpReturn(UnAuth)  
 #     print "shared redis key",shared_keys,'type is',type(shared_keys)
 #     print "shared topics",type(shared_keys[G_TOPICS]),shared_keys[G_TOPICS]
@@ -566,7 +567,7 @@ def AcceptBindLink(request, user, uuid):
     for item in tdict :
 #         topic,ok =  MqttTopics.objects.get_or_create(topic=item)
         MqttAcl.objects.get_or_create(allow=1, ipaddr=None, clientid=None,
-                                         app = user,
+                                         app_id = user,
                                          access=3, topic="/%s/%s/#" % (shared_keys[G_DEVID],item))
     
     ### 记录分享者,接受者,设备uuid,主题
@@ -585,15 +586,24 @@ def AppAcceptedShared(request,owner):
     ###查询自已接受分享的设备
     slist = MqttAcl.objects.filter(app = owner)
     devices = AppBindDevList.objects.filter(appid = owner)
-    lst1 = [ '/%s/#' % x.devid_id.hex for x in devices]
+#     lst1 = [ '/%s/#' % x.devid_id.hex for x in devices]
+    lst1 = [ x.devid_id.hex for x in devices]
+#     print "my binds ",lst1
 #     print "owner uuid ",owner.uuid.hex
     
+#     lst2 = [x.topic for x in slist]
     lst2 = [x.topic for x in slist]
-    lst3 = list(set(lst2).difference(set(lst1))) #取两个表的差集.
+    for t in lst1:
+        lst2 = [x.topic for x in slist if  t not in x.topic ]
+
+#         print " lst2 is",lst2
+        
+#     lst3 = list(set(lst2).difference(set(lst1))) #取两个表的差集.
 #     print "list3 is",lst3
     userdict = {}
     def package(lst):
         if len(lst) > 1:
+#             print "lst is ",lst
             key = lst[0]
             abd = AppBindDevList.objects.filter(devid_id = key)
             if len(abd) > 0:
@@ -609,9 +619,10 @@ def AppAcceptedShared(request,owner):
                     userdict[user][key] = set()
                     [userdict[user][key].add(x) for x in lst[1:]]
 
-    for x in lst3:
+    for x in lst2:
         lst = x.split("/")[1:-1]
-        package(lst)
+        nlst = [lst[0],'/'.join(lst[1:])]
+        package(nlst)
             
     return HttpReturn(json.dumps({G_OK:True,G_DATA:userdict},default=set_default))
     
@@ -623,11 +634,11 @@ def AppGetMySharedOut(request,owner):
 #     filter_qs = Q()
     shardict = {}
     for x in lst:
-        print "bind dev",x,"owner id",owner.uuid.hex,owner.uname
+#         print "bind dev",x,"owner id",owner.uuid.hex,owner.uname
         topics = MqttAcl.objects.filter(Q(topic__startswith = "/%s" % x) & ~Q(app=owner) & ~Q(dev_id=x))
 #         print "topics ",topics
         for y in topics:
-            print "my shared topic",y,y.app_id,y.dev_id,y.topic
+#             print "my shared topic",y,y.app_id,y.dev_id,y.topic
             tlist = y.topic.split("/")[1:-1] # /uuid/# --> uuid
             dev = tlist[0]
             uid = y.app_id.hex
@@ -647,12 +658,38 @@ def AppGetMySharedOut(request,owner):
         
     return HttpReturn(json.dumps({G_OK:True,G_DATA:shardict},default=set_default))
     
+@CheckPOSTParameters    
+def AppDropShared(body,*args):
+    owner,request = args
+
+#     rlist = []
+
+    for (k,v) in body.items():
+        if isinstance(v,list):
+            del_list = []
+            for x in v:
+                del_list.append("/%s/%s/#" % (k,x))
+#                 sharelist = [item   for item in sharelist if cmp(item.topic,"/%s/%s/#" % (k,x))]
+            
+            my_filter_qs = Q()
+            for creator in del_list:
+                my_filter_qs = my_filter_qs | Q(topic=creator)
+            MqttAcl.objects.filter(my_filter_qs).delete()
+#             rlist = MqttAcl.objects.filter(my_filter_qs)    
+        else:
+            MqttAcl.objects.filter(app = owner,topic__contains = '/%s/'%k).delete()
+#             rlist=  MqttAcl.objects.filter(app = owner,topic__contains = '/%s/'%k)
+#     for item in rlist:
+#         print "delete item is ",item.topic
+    return ReturnOK        
+       
+    
 @CheckPOSTParameters
 def AppDelShareDev(deldict,*args):
     USERS = 'users'
     TOPICS = "topics"
     DEVS="devs"
-    ALL = "*"
+
     owner,_ = args
 #     deldict = GetRequestBody(request)
 #     print "owner is ",owner.uname ,owner.uuid.hex
@@ -672,7 +709,7 @@ def AppDelShareDev(deldict,*args):
         
         def deleteTopic(user,dev):
                 txt = '/%s/' % (dev)
-#                 print "{'users':[...],G_TOPICS:all,'devs':*",txt
+#                 print "{'users':[...],G_TOPICS:'*','devs':*",txt
                 MqttAcl.objects.filter(app_id = user,topic__contains = txt).filter(~Q(topic__contains ='/%s/#' % dev)).delete()
         if isinstance(deldict[TOPICS],list):
             if isinstance(deldict[DEVS],list):
@@ -682,31 +719,31 @@ def AppDelShareDev(deldict,*args):
 #                 print "users -------=--------= ",deldict[USERS]
                 [deleteTopic3(user,dev,topic) for user in deldict[USERS] for dev in lst2 for topic in deldict[TOPICS]]
             else:
-                # {'users':[...],G_TOPICS:[...],'devs':all}
+                # {'users':[...],G_TOPICS:[...],'devs':'*'}
                 [deleteTopic3(user,dev.devid_id.hex,topic) for user in deldict[USERS] for dev in devices for topic in deldict[TOPICS]]
                 
         else:
             
             if isinstance(deldict[DEVS],list):
-                # {'users':[...],G_TOPICS:all,'devs':[...]}
+                # {'users':[...],G_TOPICS:'*','devs':[...]}
                 lst1 = [u.devid_id.hex for u in devices]
                 # 取两个列表的交集.
                 lst2 =list(set(lst1).intersection(set(deldict[DEVS])))
                 [deleteTopic(user,dev) for user in deldict[USERS] for dev in lst2]
                 
             else:
-                # {'users':[...],G_TOPICS:all,'devs':'all'}
+                # {'users':[...],G_TOPICS:*,'devs':'*'}
                 [deleteTopic(user,dev) for user in deldict[USERS] for dev in devices]
                
     else:
         if isinstance(deldict[TOPICS],list):
             def deleteTopic(dev,topic):
                     txt = '/%s/%s/#' % (dev,topic)
-#                     print "{'users':'all',G_TOPICS:[...],'devs':*}",txt
+#                     print "{'users':'*',G_TOPICS:[...],'devs':'*'}",txt
                     MqttAcl.objects.filter(topic__contains=txt).delete()
 #             devices = AppBindDevList.objects.filter(appid = user)
             if isinstance(deldict[DEVS],list):
-                # {'users':'all',G_TOPICS:[...],'devs':[...]}
+                # {'users':'*',G_TOPICS:[...],'devs':[...]}
 #                 lst = [Q(devid_id = x) for x in deldict['devs']]
 #                 devices = AppBindDevList.objects.filter(appid = user,reduce(OR,lst))
                 lst1 = [u.devid_id.hex for u in devices]
@@ -728,11 +765,11 @@ def AppDelShareDev(deldict,*args):
                 for dev in lst2: 
                     txt = '/%s/' % (dev)
                     
-#                     print " {'users':'all',G_TOPICS:'all','devs':[...]}",txt
+#                     print " {'users':'*',G_TOPICS:'all','devs':[...]}",txt
                     MqttAcl.objects.filter(topic__contains=txt).filter(~Q(topic__contains ='/%s/#' % dev)).delete()
                         
             else:
-                # {'users':'all',G_TOPICS:'all','devs':'all'}
+                # {'users':'*',G_TOPICS:'*','devs':'*'}
 #                 devices = AppBindDevList.objects.filter(appid = user)
                 
                 for dev in devices:
@@ -749,7 +786,7 @@ def AppShareDev(body,*args):
     try:
 #         results = AppBindDevList.objects.raw("SELECT devid_id from bindlist WHERE appid_id = %s AND devid_id=%s",
 #                                          [user.uuid.hex,devuuid])
-        results = AppBindDevList.objects.filter(devid_id = devuuid,appid = user)[0]
+        results = AppBindDevList.objects.filter(devid_id = devuuid,appid_id = user)[0]
     except (ObjectDoesNotExist,IndexError) as e:
         return HttpReturn(TargetNotExists)
 #     print "result id ",results
@@ -775,37 +812,15 @@ def AppShareDev(body,*args):
 #                             '/shared/%s' % otpuuid])
     expire = settings.SESSION_COOKIE_AGE * 6
     res = {G_OK:True, 'otp':otpuuid,G_EXPIRE:expire}
-    redis_pool.hmset(otpuuid,{G_APPID:user.uuid.hex,G_DEVID:devuuid,G_TOPICS:json.dumps(topics)})
+    redis_pool.hmset(otpuuid,{G_APPID:user,G_DEVID:devuuid,G_TOPICS:json.dumps(topics)})
     redis_pool.expire(otpuuid,expire)
     
 #         return JsonResponse(res,safe=False) 
     return HttpReturn(json.dumps(res))
         
-                
+         
 
-def AppAddFriend(request, user, uuid):
-    try:
-        friend = AppUser.objects.get(uuid=uuid)
-    except (ObjectDoesNotExist,ValueError) as e:
-        return HttpReturn(TargetNotExists)
-    else:
-        if friend == user:
-            return HttpReturn(TargetIsSelf)
-            
-        AppFriendList.objects.get_or_create(my_uuid=user, friend=friend)
-    return ReturnOK
-
-
-def AppRemoveFriend(request, user, uuid):
-    try:
-        friend = AppUser.objects.get(uuid=uuid)
-        AppFriendList.objects.get(my_uuid=user, friend=friend).delete()
-    except :
-        return HttpReturn(TargetNotExists)
-    else:
-        return ReturnOK
-    
-
+        
 @transaction.atomic
 def AppVerifyPhone(request, Md5sum, smscode):
     adict = redis_pool.hgetall(Md5sum)
@@ -850,10 +865,8 @@ def AppVerifyPhone(request, Md5sum, smscode):
 actionFunc = {'bind':AppBindDev,
               'checkbind':AppCheckBindDev,
               'unbind':AppDropDev,
-              'add':AppAddFriend,
-              'del':AppRemoveFriend,
               'reqshare':AcceptBindLink,
-              'sharedev':AppShareDev,
+              'sharedev':AppShareDev
               }
 
 
@@ -867,9 +880,8 @@ def AppAction(request, token, target, action):
     # ## 更新登录状态时间
     redis_pool.expire(token, settings.SESSION_COOKIE_AGE)
     
-    user = AppUser.objects.get(uuid=redis_pool.hget(token, G_UUID))        
     if action in actionFunc:
-        return actionFunc[action](request, user, target)
+        return actionFunc[action](request, redis_pool.hget(token, G_UUID), target)
     else:
         return HttpReturn(UnkownAction)
 
@@ -877,9 +889,9 @@ def AppSetAvatar(request,user):
 #     print "request is",request.__dict__  
     
     datalen = len(request.body)
-   
-    btype = magic.Magic().id_buffer(request.body)
-#     print "data len: ",datalen,"type is",btype
+    print "request.body", type(request.body)
+    btype = magic.Magic().id_buffer(bytes(request.body))
+    print "data len: ",datalen,"type is",btype
     if not any(ext in btype for ext in ['JPEG','PNG','GIF']):
         return HttpResponse(FormatError,
                             content_type=JsonType)
@@ -905,6 +917,8 @@ def AppUserChange(body, *args):
 
     user,_ = args
     oldpass = body.get(G_OLDPASS, None)
+    if not oldpass:
+        return HttpReturn(UnAuth)
     
 #     if cmp(oldpass,user.key):   #### 修改信息必须要用原密码
     if not check_password(oldpass, user.key):
@@ -935,11 +949,8 @@ def AppUserChange(body, *args):
         user.key = make_password(newpass)
     
     user.save()
-    
-    
-    
-    return ReturnOK
 
+    return ReturnOK
 
 
 def ChangeDevName(request,token,newname):
@@ -986,14 +997,14 @@ def AppGetInfo(request,user):
 @CheckPOSTParameters
 def AppSetKey(body,*args):
     user,_ = args
-    user.dkey =bytes(body.get(G_KEY,''))
+    user.dkey =bytes(body)
     user.save()
     return ReturnOK
 
 
 def AppGetKey(body,user):
     return HttpReturn(json.dumps({G_OK:True,
-                                  G_KEY: bytes(user.dkey)}))
+                                  G_DATA:bytes(user.dkey)}))
     
 @CheckPOSTParameters
 def AppSyncData(body,*args):
@@ -1063,15 +1074,44 @@ def AppSendSms(request, account):
         return HttpReturn(json.dumps({G_OK:True, 'rescode':resetcode}))
     else:
         if state in ErrDict:
-            errobj,ok = SmsErrorTable.objects.get_or_create(errcode=state)
+            errobj,ok = SmsErrorTable.objects.get_or_create(errcode=state,
+                                                            msg=ErrDict.get(state,u"未知错误"))
             SmsErrorLog.objects.create(errcode=errobj, ipaddr=ipobj,
                                        addtime=timezone.now(), phone=adict[G_PHONE])
-        if state == 10006 or state == 10007 or state == 10005:
+        if state in [10006,10007,10005]:
             return HttpReturn(json.dumps({G_ERR:"OtherError", G_MSG:ErrDict[state]}))
         else:
             return HttpReturn(InternalError)
     
-
+    
+@CheckPOSTParameters   
+def AppSendSmsToNewPhone(body,*args):
+    
+    if not all(x in body for x in [G_PHONE,G_CAPTCHA]):
+        return HttpReturn(ArgError)
+    user,request = args
+    mycaptcha = request.session.pop(request.COOKIES.get(G_CSRFTOKEN),None)
+    
+    print "mycaptcha ",mycaptcha == str(body.get(G_CAPTCHA,None))
+        
+    if not mycaptcha or cmp(mycaptcha, str(body.get(G_CAPTCHA,None))):
+            return HttpReturn(CaptchaError)
+    phone = str(body.get(G_PHONE,''))
+    
+    ### 不能发给已经注册的手机.
+    if len(AppUser.objects.filter(phone = phone)) >0:
+        return HttpReturn(PhoneExists)
+    
+        
+    
+    
+    smscode = hashlib.md5(phone + str(time.time())).hexdigest().upper()
+    ipaddr = request.META.get(G_REMOTE_ADDR)
+    redis_pool.hmset(smscode, {G_PHONE: phone, G_IPADDR: ipaddr})
+    redis_pool.expire(smscode, settings.SESSION_COOKIE_AGE)
+    res = {G_PHONE: phone,G_SMSCODE: smscode,G_OK:True}
+    return HttpReturn(json.dumps(res))
+        
     
 QueryFunc = {'querydev':AppQueryDev,
              'queryapp':AppQueryApp,
@@ -1083,10 +1123,11 @@ QueryFunc = {'querydev':AppQueryDev,
              'change':AppUserChange,
              'setavatar':AppSetAvatar,
              'getavatar':AppGetAvatar,
-             'sendsms':AppSendSms,
+             'chkphone':AppSendSmsToNewPhone,
              'delshare':AppDelShareDev,
              'sharedout':AppGetMySharedOut,
-             'sharedrecv':AppAcceptedShared}    
+             'sharedrecv':AppAcceptedShared,
+             'sharedrop':AppDropShared}    
  
  
 def AppResetPwd(request, Md5sum, newpass, smscode):
@@ -1117,12 +1158,10 @@ def AppFindPwd(request, account, captcha):
 #     print "find pwd first", account, captcha
     if not account or not captcha:
         return HttpReturn(ArgError)
-    try:    
-        mycaptcha = request.session.pop(request.COOKIES.get(G_CSRFTOKEN))
-    except KeyError:
-        return HttpReturn(CaptchaError)
-    if cmp(mycaptcha, captcha):
-        return HttpReturn(CaptchaError)
+     
+    mycaptcha = request.session.pop(request.COOKIES.get(G_CSRFTOKEN),None)
+    if not mycaptcha or cmp(mycaptcha, captcha):
+            return HttpReturn(CaptchaError)
 
     try:
         accobj = AppUser.objects.raw('SELECT * FROM user_manager_appuser where uname = %s OR email = %s  OR phone= %s',

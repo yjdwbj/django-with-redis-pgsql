@@ -171,7 +171,7 @@ class IotAuthTestCase(TestCase):
         
         post_request = RequestFactory()
         post_request = post_request.post(url, json.dumps({'dkey':'aaaaaa'}), ConType)
-        post_request.__dict__['body'] = json.dumps({'dkey':'aaaaaa'})
+#         post_request.__dict__['body'] = json.dumps({'dkey':'aaaaaa'})
        
         
         response = AppAction(post_request, self.signid, dev.uuid.hex, 'bind')
@@ -292,7 +292,7 @@ class IotAuthTestCase(TestCase):
        
         post_request = RequestFactory()
         post_request = post_request.post(url, json.dumps({'dkey':'aaaaaa'}), 'application/json; charset=utf-8')
-        post_request.__dict__['body'] = json.dumps({'dkey':'aaaaaa'})
+#         post_request.__dict__['body'] = json.dumps({'dkey':'aaaaaa'})
         
         response = AppAction(post_request, self.signid, dev.uuid.hex, 'unbind')
         
@@ -378,19 +378,23 @@ class IotAuthTestCase(TestCase):
         url = '/iot/v1.0/app/%s/change/' % self.signid
         newdata = {'oldpass': 'aaaaaa',
                 'newpass':'12345678',
-                'phone':'13410103330',
+#                 'phone':'13410103330',
                 'email':'test@abc.com.cn'}
         
-        request = Client().post(url,
-                                   content_type=ConType)
-        setattr(request, 'META', {'REMOTE_ADDR':'127.0.0.1'})
-        setattr(request, 'body', json.dumps(newdata))
+#         request = Client().post(url,
+#                                    content_type=ConType)
+#         setattr(request, 'META', {'REMOTE_ADDR':'127.0.0.1'})
+        post_request = RequestFactory()
+        post_request = post_request.post(url, json.dumps(newdata), ConType)
+#         setattr(request, 'body', json.dumps(newdata))
         print "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%"
       
         
-        response = AppQuery(request, self.signid, 'change')
+        response = AppQuery(post_request, self.signid, 'change')
         
         d = json.loads(response.content)
+        
+        print "test user change response is ---------------- ",response.content
         
         self.assertEqual(d['ok'], True)
         
@@ -488,7 +492,7 @@ class IotAuthTestCase(TestCase):
        
         response = IotAppAuth(request,user.uname,'aaaaaa')
         print "-----------------------------------------------------------"
-        print 'server response', response.content;
+        print 'server response ---- app login', response.content;
         d = json.loads(response.content);
         return d
         
@@ -600,7 +604,7 @@ class ShareTopicTestCase(TestCase):
         request = self.factory.get('/iot/v1.0/app/auth/%s/%s/' % (self.uuid1,'aaaaaa'))
        
         response = IotAppAuth(request,self.uuid1,'aaaaaa')
-        print "login user response",response
+        print "login user response 0000000000000000",response
         d = json.loads(response.content)
         self.assertEqual(d['ok'], True)   
         
