@@ -75,15 +75,15 @@ class ImageFileField(models.FileField):
     def clean(self,*args,**kwargs):
        
         data = super(ImageFileField,self).clean(*args,**kwargs)
-        self.attr_class.bindata = data.file.file.read()
-        btype = magic.Magic().id_buffer(self.attr_class.bindata)
-#     print "data len: ",datalen,"type is",btype
-        
-        if not any(ext in btype for ext in self.fmt):
-            raise ValidationError(self.help_text)
-        if data.file.size > self.max_upload_size:
-            raise ValidationError(u'文件超过%sK' % self.max_upload_size/1024)
-#         print "upload data is ",type(data),data
+        print "data is type",type(data)
+        if not isinstance(data,buffer):
+            self.attr_class.bindata = data.file.file.read()
+            btype = magic.Magic().id_buffer(self.attr_class.bindata)
+            if not any(ext in btype for ext in self.fmt):
+                raise ValidationError(self.help_text)
+            if data.file.size > self.max_upload_size:
+                raise ValidationError(u'文件超过%sK' % self.max_upload_size/1024)
+    #         print "upload data is ",type(data),data
         return data
         
     def db_type(self,connection):
@@ -95,6 +95,22 @@ class ImageFileField(models.FileField):
         if value is None:
             return value or u""
         return  value
+    
+    def pre_save(self, model_instance, add):
+        "Returns field's value just before saving."
+        try:
+            file = super(ImageFileField, self).pre_save(model_instance, add)
+            if file and not file._committed:
+            # Commit the file to storage prior to saving the model
+                file.save(file.name, file, save=False)
+            return file
+        except:
+            pass
+            
+        return self
+       
+           
+
     
 
 class AppUser(models.Model):
@@ -119,7 +135,7 @@ class AppUser(models.Model):
     phone_active = models.BooleanField(default=False,verbose_name=u'手机已验证')
     nickname = models.CharField(null=True,default=u"新用户",max_length=64,verbose_name=u'昵称')
     sex = models.IntegerField(choices=GENDER_CHOICES,default=0,verbose_name=u'性别')
-    avatar =ImageFileField(verbose_name=u'头像')
+    avatar =ImageFileField(blank=True,verbose_name=u'头像')
     dkey = models.BinaryField(verbose_name=u'小机密码')
     
     
@@ -150,8 +166,15 @@ class AppUser(models.Model):
 #         print "my self key ",self.key
         if self.key.count('$') != 3:
             self.key = make_password(self.key)
-        if self.avatar.bindata:
-            self.avatar =base64.b64encode(self.avatar.bindata)
+       
+#         print "avatar type is " ,self.avatar
+        if not isinstance(self.avatar,buffer):
+            if self.avatar.bindata:
+                self.avatar =base64.b64encode(self.avatar.bindata)
+#                 print "avatar data is ",self.avatar
+        else:
+            self.avatar = bytes(self.avatar)
+
 #         if self.pk is not None:
 #             try:
 #                 orig = AppUser.objects.get(pk=self.pk)
