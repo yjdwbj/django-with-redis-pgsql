@@ -215,7 +215,7 @@ def PreCheckRequest(request, obj, rawpwd):
         srvobj = SrvList.objects.get(ipaddr=srvipaddr[0])
 
         retdict[G_SRVS] = ':'.join([srvobj.ipaddr, str(srvobj.port)])
-    retdict['time'] = str(int(time.time()))
+    
     retdict[G_EXPIRE] = settings.SESSION_COOKIE_AGE
 
     hasher, iterations, salt, code = obj.key.split('$')
@@ -232,15 +232,42 @@ def PreCheckRequest(request, obj, rawpwd):
                              G_IPADDR: ipaddr.ipaddr, G_UUID: obj.uuid.hex})
     redis_pool.expire(hkey, settings.SESSION_COOKIE_AGE)
 
+    
+    
+
     if 'dev' in request.path:
         DevicesLoginHistory.objects.create(devices=obj, inout=True, ipaddr=ipaddr)
     else:
         AppUserLoginHistory.objects.create(user=obj, inout=True, ipaddr=ipaddr)
         retdict[G_UUID] = obj.uuid.hex
+    
+    ##     记录登录数据,十分钟之内的重复登录,不查数据,只查redis
+    csrftoken =  request.COOKIES.get(G_CSRFTOKEN,None)
+    redis_pool.hmset(csrftoken,{G_IPADDR:ipaddr.ipaddr,"res":json.dumps(retdict)})
+    redis_pool.expire(csrftoken,settings.SESSION_COOKIE_AGE);
+    retdict['time'] = str(int(time.time()))
     return HttpReturn(json.dumps(retdict))
 
 
+def CheckRedisLogin(func):
+    def wrapper(request,account,pwd):
+        csrftoken =  request.COOKIES.get(G_CSRFTOKEN,None)
+        resdict = redis_pool.hgetall(csrftoken)
+        addr = request.META.get(G_REMOTE_ADDR)
+        if resdict and addr == resdict[G_IPADDR]:
+            print "get return from redis "
+            d = json.loads(resdict["res"])
+            d["time"] =  str(int(time.time()))
+            return HttpReturn(json.dumps(d))
+        else:
+            return func(request,account,pwd)
+    
+    return wrapper;
+    
+@CheckRedisLogin
 def IotAppAuth(request,account,pwd):
+#     redis_pool.hmset(csrftoken,{G_IPADDR:ipaddr.ipaddr,"res":json.dumps(retdict)})
+    
     try:
         val = UUID(account, version=4)
         obj = AppUser.objects.raw('SELECT * FROM user_manager_appuser where uname = %s OR email = %s OR uuid = %s OR phone= %s',
@@ -268,7 +295,7 @@ def IotAppAuth(request,account,pwd):
     
     
 
-
+@CheckRedisLogin
 def IotDevAuth(request,account,pwd):
     try:
         obj = Devices.objects.get(uuid=account)
