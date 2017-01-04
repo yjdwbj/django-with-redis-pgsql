@@ -80,6 +80,8 @@ G_SRVS = 'srvs'
 G_VER = 'ver'
 G_RESCODE = 'rescode'
 G_SMS= 'sms'
+G_SESSIONID = 'sessionid'
+G_ACCOUNT = 'account'
 
 UnkownSignMethod = json.dumps({G_ERR:"UnkownSignMethod",
                 G_MSG:u"未知签名方法", G_OK:False}, ensure_ascii=False)
@@ -225,25 +227,31 @@ def PreCheckRequest(request, obj, rawpwd):
     hkey = retdict[G_SIGN]
     
     
-    
+    csrftoken =  request.COOKIES.get(G_CSRFTOKEN,request.COOKIES.get(G_SESSIONID,None)) 
     ipaddr, state = IpAddress.objects.get_or_create(ipaddr=request.META.get(G_REMOTE_ADDR))
 #     print "ipaddr",ipaddr
     redis_pool.hmset(hkey, {G_PASSWORD: hashlib.sha256(rawpwd).hexdigest(),
-                             G_IPADDR: ipaddr.ipaddr, G_UUID: obj.uuid.hex})
+                             G_IPADDR: ipaddr.ipaddr, G_UUID: obj.uuid.hex,
+                             G_CSRFTOKEN:csrftoken})
     redis_pool.expire(hkey, settings.SESSION_COOKIE_AGE)
 
     
     
-
+    tokenlist = []
     if 'dev' in request.path:
+        print "devices cookies ",request.COOKIES,csrftoken
+        tokenlist.append(obj.uuid.hex)
         DevicesLoginHistory.objects.create(devices=obj, inout=True, ipaddr=ipaddr)
     else:
+        tokenlist = [obj.uname,obj.uuid.hex,obj.phone,obj.email]
         AppUserLoginHistory.objects.create(user=obj, inout=True, ipaddr=ipaddr)
         retdict[G_UUID] = obj.uuid.hex
     
     ##     记录登录数据,十分钟之内的重复登录,不查数据,只查redis
-    csrftoken =  request.COOKIES.get(G_CSRFTOKEN,None)
-    redis_pool.hmset(csrftoken,{G_IPADDR:ipaddr.ipaddr,"res":json.dumps(retdict)})
+    
+    
+    redis_pool.hmset(csrftoken,{G_IPADDR:ipaddr.ipaddr,"res":json.dumps(retdict),
+                                G_ACCOUNT:tokenlist})
     redis_pool.expire(csrftoken,settings.SESSION_COOKIE_AGE);
     retdict['time'] = str(int(time.time()))
     return HttpReturn(json.dumps(retdict))
@@ -251,13 +259,17 @@ def PreCheckRequest(request, obj, rawpwd):
 
 def CheckRedisLogin(func):
     def wrapper(request,account,pwd):
-        csrftoken =  request.COOKIES.get(G_CSRFTOKEN,None)
+        csrftoken =  request.COOKIES.get(G_CSRFTOKEN,request.COOKIES.get(G_SESSIONID,None))
         resdict = redis_pool.hgetall(csrftoken)
         addr = request.META.get(G_REMOTE_ADDR)
-        if resdict and addr == resdict[G_IPADDR]:
+        
+        if csrftoken and resdict and (addr == resdict[G_IPADDR]) \
+             and (G_ACCOUNT in resdict) and (account in resdict[G_ACCOUNT]):
             print "get return from redis "
+            print "you cookies ",request.COOKIES    
             d = json.loads(resdict["res"])
             d["time"] =  str(int(time.time()))
+            redis_pool.expire(d[G_SIGN], settings.SESSION_COOKIE_AGE)
             return HttpReturn(json.dumps(d))
         else:
             return func(request,account,pwd)
@@ -598,7 +610,8 @@ def AcceptBindLink(request, user, uuid):
                                          access=3, topic="/%s/%s/#" % (shared_keys[G_DEVID],item))
     
     ### 记录分享者,接受者,设备uuid,主题
-    redis_pool.expire(uuid,1)
+#     redis_pool.expire(uuid,1)
+    redis_pool.delete(uuid)
 #     for k,v in shared_keys.items():
 #         redis_pool.hdel(uuid,key)
     return HttpReturn(json.dumps({G_OK:True, G_DATA:shared_keys}))
@@ -883,8 +896,8 @@ def AppVerifyPhone(request, Md5sum, smscode):
         obj.save()
     
     #### 已经验证了,清除内存
-    for (k,v) in adict.items():
-        redis_pool.hdel(Md5sum,k)
+#     redis_pool.expire(Md5sum,1)
+    redis_pool.delete(Md5sum)
     
     return ReturnOK
 
@@ -901,8 +914,10 @@ actionFunc = {'bind':AppBindDev,
 def AppAction(request, token, target, action):
     ipaddr = request.META.get(G_REMOTE_ADDR)
     mem_addr = redis_pool.hget(token, G_IPADDR)
-     
-    if not mem_addr or  cmp(mem_addr, ipaddr):
+    csrftoken =  request.COOKIES.get(G_CSRFTOKEN,request.COOKIES.get(G_SESSIONID,None))
+#     print "action from signid ",data,' ipaddr ',ipaddr
+    sid  = redis_pool.hget(token, G_CSRFTOKEN) 
+    if not mem_addr or  cmp(mem_addr, ipaddr) or cmp(csrftoken,sid):
         return HttpReturn(UnAuth)
     # ## 更新登录状态时间
     redis_pool.expire(token, settings.SESSION_COOKIE_AGE)
@@ -1217,11 +1232,17 @@ def AppQuery(request, token, action):
 #     data = json.loads(cache.get(token))
     ipaddr = request.META.get(G_REMOTE_ADDR)
     mem_addr = redis_pool.hget(token, G_IPADDR)
+    csrftoken =  request.COOKIES.get(G_CSRFTOKEN,request.COOKIES.get(G_SESSIONID,None))
 #     print "action from signid ",data,' ipaddr ',ipaddr
-    if not mem_addr or mem_addr != ipaddr:
+    sid  = redis_pool.hget(token, G_CSRFTOKEN)
+    if not mem_addr or cmp(mem_addr,ipaddr) or cmp(csrftoken,sid):
         return HttpReturn(UnAuth)
     
     if action == 'logout':
+        csrftoken =  request.COOKIES.get(G_CSRFTOKEN,request.COOKIES.get(G_SESSIONID,None))
+        redis_pool.expire(csrftoken,1)
+        redis_pool.delete(csrftoken)
+        
 #         print "request", request.path
         ipobj, state = IpAddress.objects.get_or_create(ipaddr=ipaddr)
         if 'dev' in request.path:
@@ -1230,9 +1251,8 @@ def AppQuery(request, token, action):
         else:
             obj = AppUser.objects.get(uuid=redis_pool.hget(token, G_UUID))
             AppUserLoginHistory.objects.create(user=obj, inout=False, ipaddr=ipobj, optime=timezone.now())
-        redis_pool.expire(token, 1)
-        redis_pool.hdel(token, G_IPADDR)
-        redis_pool.hdel(token, G_UUID)
+#         redis_pool.expire(token, 1)
+        redis_pool.delete(token)
         return ReturnOK
     
     user = AppUser.objects.get(uuid=redis_pool.hget(token, G_UUID))
