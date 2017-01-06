@@ -42,10 +42,10 @@ class MyCustomAdmin(admin.ModelAdmin):
             return url % ( obj.regip.ipaddr,obj.regip.ipaddr)
         
 
-    @transaction.atomic
-    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
-        return super(MyCustomAdmin,self).changeform_view(request,object_id,form_url,extra_context)
-    
+#     @transaction.atomic
+#     def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+#         return super(MyCustomAdmin,self).changeform_view(request,object_id,form_url,extra_context)
+#     
 
     
     view_ip.short_description = u'IP地址'
@@ -106,7 +106,7 @@ class AppUserAdmin(MyCustomAdmin):
     def save_model(self, request, obj, form, change):
         ipobj,ok = IpAddress.objects.get_or_create(ipaddr=request.META.get('REMOTE_ADDR'))
         obj.regip = ipobj
-#         print "new key is",obj.key
+
 #         obj.key = make_password(obj.key)
 #         obj.uuid = uuid4().hex
         obj.save()

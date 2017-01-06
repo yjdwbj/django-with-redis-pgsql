@@ -236,7 +236,7 @@ def PreCheckRequest(request, obj, rawpwd):
     retdict[G_SIGN] = sessionid = request.session.session_key
     
 #     sessionid =  request.COOKIES.get(G_SESSIONID,None)
-    print "login cookies",sessionid,request.COOKIES
+#     print "login cookies",sessionid,request.COOKIES
     ipaddr, state = IpAddress.objects.get_or_create(ipaddr=request.META.get(G_REMOTE_ADDR))
 #     print "ipaddr",ipaddr
     redis_pool.hmset(sessionid, {G_PASSWORD: hashlib.sha256(rawpwd).hexdigest(),
@@ -275,8 +275,8 @@ def CheckRedisLogin(func):
         
         if sessionid and resdict and (addr == resdict[G_IPADDR]) \
              and (G_ACCOUNT in resdict) and (account in resdict[G_ACCOUNT]):
-            print "get return from redis "
-            print "you cookies ",request.COOKIES    
+#             print "get return from redis "
+#             print "you cookies ",request.COOKIES    
             d = json.loads(resdict["res"])
             d["time"] =  str(int(time.time()))
             redis_pool.expire(sessionid, settings.SESSION_COOKIE_AGE)
@@ -933,8 +933,8 @@ def AppAction(request, target, action):
     
 #     print "action from signid ",data,' ipaddr ',ipaddr
     print "action access cookies",sessionid,request.COOKIES
-    sid  = redis_pool.hget(sessionid, G_CSRFTOKEN) 
-    if not mem_addr or  cmp(mem_addr, ipaddr) or cmp(sessionid,sid):
+    if not mem_addr or  cmp(mem_addr, ipaddr):
+        print "not access"
         return HttpReturn(UnAuth)
     # ## 更新登录状态时间
     redis_pool.expire(sessionid, settings.SESSION_COOKIE_AGE)
@@ -1262,7 +1262,6 @@ def AppQuery(request,action):
         return HttpReturn(UnAuth)
     
     if action == 'logout':
-        redis_pool.delete(sessionid)
         
 #         print "request", request.path
         ipobj, state = IpAddress.objects.get_or_create(ipaddr=ipaddr)

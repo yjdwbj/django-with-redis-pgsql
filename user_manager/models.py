@@ -75,7 +75,7 @@ class ImageFileField(models.FileField):
     def clean(self,*args,**kwargs):
        
         data = super(ImageFileField,self).clean(*args,**kwargs)
-        print "data is type",type(data)
+#         print "data is type",type(data)
         if not isinstance(data,buffer):
             self.attr_class.bindata = data.file.file.read()
             btype = magic.Magic().id_buffer(self.attr_class.bindata)
@@ -124,7 +124,7 @@ class AppUser(models.Model):
     email = models.EmailField(unique=True,verbose_name=u'邮箱')
     phone = models.CharField(unique=True,max_length=11,verbose_name=u'手机号码')
     key = models.CharField(max_length=128,verbose_name=u'密钥')
-    uuid = models.UUIDField(primary_key=True,unique=True,default=uuid.uuid4().hex,editable=False,
+    uuid = models.UUIDField(primary_key=True,unique=True,editable=False,
                             verbose_name=u'用户ID')
     
     
@@ -163,7 +163,9 @@ class AppUser(models.Model):
             return "image/%s" % btype.split(' ')[0].lower()
         
     def save(self, *args, **kw):
-#         print "my self key ",self.key
+        if not self.uuid:
+            self.uuid = uuid.uuid4().hex
+#         print "my self data ",self.uname,self.email,self.uuid
         if self.key.count('$') != 3:
             self.key = make_password(self.key)
        
@@ -174,15 +176,6 @@ class AppUser(models.Model):
 #                 print "avatar data is ",self.avatar
         else:
             self.avatar = bytes(self.avatar)
-
-#         if self.pk is not None:
-#             try:
-#                 orig = AppUser.objects.get(pk=self.pk)
-#                 print "orig key is",orig.key
-#                 if orig.key != self.key and self.key.count('$') != 3:
-#                     self.key = make_password(self.key)
-#             except ObjectDoesNotExist:
-#                 self.key = make_password(self.key)
         super(AppUser, self).save(*args, **kw)
         
 
@@ -236,7 +229,7 @@ class Devices(models.Model):
     mac = models.CharField(max_length=17,blank=False,verbose_name=u'网卡地址');
     key = models.CharField(max_length=128,blank=False,verbose_name=u'密码');
     appkey = models.CharField(max_length=8,unique=True,blank=False,verbose_name=u'APP密码');
-    uuid = models.UUIDField(primary_key = True,default=uuid.uuid4().hex,unique=True,verbose_name=u'设备ID');
+    uuid = models.UUIDField(primary_key = True,unique=True,verbose_name=u'设备ID');
     name = models.CharField(max_length=256,blank=False,default=u'empty',verbose_name=u'名称');
     regip = models.ForeignKey(IpAddress,on_delete = models.CASCADE,verbose_name=u'注册地址')
     regtime = models.DateTimeField(default=timezone.now,verbose_name=u'注册时间')  
@@ -254,6 +247,8 @@ class Devices(models.Model):
         return unicode(self.name) or u'empty'
     
     def save(self, *args, **kw):
+        if not self.uuid:
+            self.uuid = uuid.uuid4().hex
 #         print "my self key ",self.key
         if self.key.count('$') != 3:
             self.key = make_password(self.key)
