@@ -21,8 +21,25 @@ from django.contrib.auth.hashers import UNUSABLE_PASSWORD_PREFIX, UNUSABLE_PASSW
 from django.utils.crypto import (
     constant_time_compare, get_random_string, pbkdf2,
 )
+from . import ffi,nettle
 import warnings
 warnings.filterwarnings("ignore")
+
+
+def make_password(key):
+    salt = MyPBKDF2PasswordHasher().salt()
+    iterations = settings.PBKDF2_ITERATIONS
+    algorithm  = 'pbkdf2_sha1'
+    klen = len(key)
+    slen = len(salt)
+    key = ffi.new("uint8_t[]", bytes(key))
+    s = ffi.new("uint8_t[]", bytes(salt))
+
+    buf = ffi.new("uint8_t[20]")
+    nettle.nettle_pbkdf2_hmac_sha1(
+        klen, key, int(iterations), slen, s, 20, buf)
+
+    return '$'.join([algorithm,str(iterations),salt,base64.b64encode(ffi.string(buf)).decode('utf-8')])
 
 
 class MyPBKDF2PasswordHasher(PBKDF2SHA1PasswordHasher):
@@ -32,24 +49,24 @@ class MyPBKDF2PasswordHasher(PBKDF2SHA1PasswordHasher):
     iterations = settings.PBKDF2_ITERATIONS
 
 
-def make_password(password, salt=None):
-    """
-    Turn a plain-text password into a hash for database storage
+# def make_password(password, salt=None):
+#     """
+#     Turn a plain-text password into a hash for database storage
 
-    Same as encode() but generates a new random salt.
-    If password is None then a concatenation of
-    UNUSABLE_PASSWORD_PREFIX and a random string will be returned
-    which disallows logins. Additional random string reduces chances
-    of gaining access to staff or superuser accounts.
-    See ticket #20079 for more info.
-    """
-    if password is None:
-        return UNUSABLE_PASSWORD_PREFIX + get_random_string(UNUSABLE_PASSWORD_SUFFIX_LENGTH)
-    hasher = MyPBKDF2PasswordHasher()
-    if not salt:
-        salt = hasher.salt()
+#     Same as encode() but generates a new random salt.
+#     If password is None then a concatenation of
+#     UNUSABLE_PASSWORD_PREFIX and a random string will be returned
+#     which disallows logins. Additional random string reduces chances
+#     of gaining access to staff or superuser accounts.
+#     See ticket #20079 for more info.
+#     """
+#     if password is None:
+#         return UNUSABLE_PASSWORD_PREFIX + get_random_string(UNUSABLE_PASSWORD_SUFFIX_LENGTH)
+#     hasher = MyPBKDF2PasswordHasher()
+#     if not salt:
+#         salt = hasher.salt()
 
-    return hasher.encode(password, salt)
+#     return hasher.encode(password, salt)
 
 
 class IpAddress(models.Model):

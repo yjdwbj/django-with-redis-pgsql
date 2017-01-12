@@ -150,6 +150,7 @@ ReturnOK = HttpResponse(json.dumps({G_OK: True}), content_type=JsonType)
 
 
 def check_password(rawpwd, encoded):
+    print "check pwd "
     algorithm, iterations, salt, bhash = encoded.split('$', 3)
     klen = len(rawpwd)
     slen = len(salt)

@@ -21,26 +21,37 @@ from django.conf.urls.static import static
 from django.contrib.staticfiles import views
 
 
-
-
 urlpatterns = [
     url(r'^admin/', admin.site.urls),
-    url(r'^iot/dev/auth/',IotDevAuth),
-    url(r'^iot/dev/active/(?P<account>\w+)/(?P<pwd>\w+)/$',IotDevActive),
-    url(r'^iot/app/findpwd/(?P<account>\w+)/(?P<captcha>\d{6})/$',AppFindPwd),
-    url(r'^iot/app/active/(?P<Md5sum>\w+)/(?P<smscode>\w+)/$',AppVerifyPhone),
-    url(r'^iot/app/opt/(?P<token>\w+)/(?P<target>\w+)/(?P<action>\w+)/$',AppAction),
-    url(r'^iot/app/resetpwd/(?P<Md5sum>[A-F0-9]{32})/(?P<newpass>\w+)/(?P<smscode>\d{5})/$',AppResetPwd),
-    url(r'^iot/app/sendsms/(?P<account>[A-F0-9]{32})/$',AppSendSms),
-    url(r'^iot/app/(?P<token>\w+)/(?P<action>\w+)/$',AppQuery),
-    url(r'^iot/dev/changedev/(?P<token>\w+)/(?P<newname>\w+)/$',ChangeDevName),
-    url(r'^iot/app/auth/$',IotAppAuth),
-    url(r'^iot/app/register/$',IotAppRegister),
-    url(r'^iot/ping/(?P<token>\w+)/$',IotPing),
-    url(r'^register/$',AppRegister),
-    url(r'^get_code/$',get_verify_code),
-    url(r'^get_status/$',SqlTimeStatus)
-] 
+
+    url(r'^iot/v1.0/dev/active/(?P<account>\w+)/(?P<pwd>\w+)/$', IotDevActive),
+    url(
+        r'^iot/v1.0/app/findpwd/(?P<account>\w+)/(?P<captcha>\d{6})/$', AppFindPwd),
+    url(
+        r'^iot/v1.0/app/active/(?P<Md5sum>\w+)/(?P<smscode>\d{5})/$', AppVerifyPhone),
+    # url(r'^iot/v1.0/app/opt/(?P<token>\w+)/(?P<target>\w+)/(?P<action>\w+)/$',AppAction1),
+    url(
+        r'^iot/v1.0/app/opt/(?P<target>[a-fA-F0-9]{32})/(?P<action>\w+)/$', AppAction),
+    url(
+        r'^iot/v1.0/app/resetpwd/(?P<Md5sum>[a-fA-F0-9]{32})/(?P<newpass>\w+)/(?P<smscode>\d{5})/$', AppResetPwd),
+    url(r'^iot/v1.0/app/sendsms/(?P<account>[a-fA-F0-9]{32})/$', AppSendSms),
+    # url(r'^iot/v1.0/app/(?P<token>\w+)/(?P<action>\w+)/$',AppQuery1),
+    url(r'^iot/v1.0/app/(?P<action>\w+)/$', AppQuery),
+    # url(r'^iot/v1.0/dev/changedev/(?P<token>\w+)/(?P<newname>\w+)/$',ChangeDevName1),
+    url(r'^iot/v1.0/dev/changedev/(?P<newname>\w+)/$', ChangeDevName),
+    url(r'^iot/v1.0/app/auth/(?P<account>\w+)/(?P<pwd>\w+)/$', IotAppAuth),
+    url(r'^iot/v1.0/dev/auth/(?P<account>\w+)/(?P<pwd>\w+)/$', IotDevAuth),
+    url(r'^iot/v1.0/app/register/$', IotAppRegister),
+    # url(r'^iot/v1.0/ping/(?P<token>\w+)/$', IotPing1),
+    url(r'^iot/v1.0/ping/$', IotPing),
+    # url(
+    #      r'^iot/v1.0/querycert/(?P<token>\w+)/(?P<ipaddr>[0-9.]{7,15})/$',
+    #      QueryCert1),
+    url(r'^iot/v1.0/querycert/(?P<ipaddr>[0-9.]{7,15})/$', QueryCert),
+    #     url(r'^register/$',AppRegister),
+    url(r'^get_code/$', get_verify_code)
+
+]
 
 
 if settings.DEBUG is False:
@@ -48,8 +59,8 @@ if settings.DEBUG is False:
         url(r'^static/(?P<path>.*)$', views.serve),
     ]
 
-if settings.DEBUG is False:   #if DEBUG is True it will be served automatically
+if settings.DEBUG is False:  # if DEBUG is True it will be served automatically
     urlpatterns.append(
-            url(r'^static/(?P<path>.*)$', views.static.serve,
-                {'document_root': settings.STATIC_ROOT}),
+        url(r'^static/(?P<path>.*)$', views.static.serve,
+            {'document_root': settings.STATIC_ROOT}),
     )
