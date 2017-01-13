@@ -708,9 +708,12 @@ def AppAcceptedShared(request, owner):
                     [userdict[user][key].add(x) for x in lst[1:]]
 
     for x in lst2:
+        if owner.uuid.hex in x:
+            continue
         lst = x.split("/")[1:-1]
         nlst = [lst[0], '/'.join(lst[1:])]
         package(nlst)
+    userdict.pop(owner.uuid.hex,None)
 
     return HttpReturn(json.dumps({G_OK: True, G_DATA: userdict}, default=set_default))
 
