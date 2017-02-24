@@ -391,7 +391,7 @@ def IotAppRegister(data, *args):
         else:
             return HttpReturn(PhoneExists)
     else:
-        return HttpReturn(ArgError, content_type=JsonType)
+        return HttpReturn(ArgError)
 
     if email:
         try:

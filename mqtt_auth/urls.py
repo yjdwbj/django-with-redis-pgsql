@@ -36,12 +36,13 @@ urlpatterns = [
         r'^iot/v1.0/app/resetpwd/(?P<Md5sum>[a-fA-F0-9]{32})/(?P<newpass>\w+)/(?P<smscode>\d{5})/$', AppResetPwd),
     url(r'^iot/v1.0/app/sendsms/(?P<account>[a-fA-F0-9]{32})/$', AppSendSms),
     # url(r'^iot/v1.0/app/(?P<token>\w+)/(?P<action>\w+)/$',AppQuery1),
-    url(r'^iot/v1.0/app/(?P<action>\w+)/$', AppQuery),
+    url(r'^iot/v1.0/app/register/$', IotAppRegister),
     # url(r'^iot/v1.0/dev/changedev/(?P<token>\w+)/(?P<newname>\w+)/$',ChangeDevName1),
     url(r'^iot/v1.0/dev/changedev/(?P<newname>\w+)/$', ChangeDevName),
     url(r'^iot/v1.0/app/auth/(?P<account>\w+)/(?P<pwd>\w+)/$', IotAppAuth),
     url(r'^iot/v1.0/dev/auth/(?P<account>\w+)/(?P<pwd>\w+)/$', IotDevAuth),
-    url(r'^iot/v1.0/app/register/$', IotAppRegister),
+    url(r'^iot/v1.0/app/(?P<action>\w+)/$', AppQuery),
+   
     # url(r'^iot/v1.0/ping/(?P<token>\w+)/$', IotPing1),
     url(r'^iot/v1.0/ping/$', IotPing),
     # url(
