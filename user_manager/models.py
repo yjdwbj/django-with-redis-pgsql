@@ -83,6 +83,7 @@ class IpAddress(models.Model):
     def __unicode__(self):
         return self.ipaddr
 
+# 这里把图片用bytea对像保存在postgresql里，虽然解决图片与用户不一致的问题，但是对数据压力很大，如果保存在文件系统，只在数据库里存一个路径会快一些。
 
 class ImageFileField(models.FileField):
 
