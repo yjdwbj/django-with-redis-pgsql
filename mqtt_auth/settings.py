@@ -38,11 +38,11 @@ PBKDF2_ITERATIONS = 1024
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-#         "LOCATION" : "unix://:f4e4821080ca489d3361a520fc2123495755559b45fb24323c5b02e79163e425@/var/run/redis/redis.sock?db=1",
-        "LOCATION": "redis://:f4e4821080ca489d3361a520fc2123495755559b45fb24323c5b02e79163e425@192.168.25.100:6379",
+#         "LOCATION" : "unix://:ffffff@/var/run/redis/redis.sock?db=1",
+        "LOCATION": "redis://:fdfgddddggg@192.168.25.100:6379",
         "OPTIONS": {
             "DB":0,
-            "PASSWORD":"f4e4821080ca489d3361a520fc2123495755559b45fb24323c5b02e79163e425",
+            "PASSWORD":"fdgfffffffffffffgfggg",
             
             "CONNECTION_POOL_KWARGS": {"max_connections": 65535},
         }
@@ -187,7 +187,7 @@ DATABASES = {
     },
     'devdb':{
         'ENGINE':'django.db.backends.postgresql_psycopg2',
-        'NAME' : 'jieli_iot_idmaker',
+        'NAME' : 'db1',
         'USER' : 'postgres',
         'PASSWORD':'',
         'HOST':'192.168.25.105',
