@@ -352,7 +352,7 @@ def IotDevAuth(request, account, pwd):
 
 @CheckPOSTParameters
 def IotAppRegister(data, *args):
-    # {"name":"test3","email":"yjdwbj@gmail.com","phone":"15916203772","key":123456,"captcha":123456}
+    # {"name":"test3","email":"yjdwbj@gmail.com","phone":"13825461111","key":123456,"captcha":123456}
     request = args[0]
     email = data.get(G_EMAIL, None)
     uname = data.get(G_NAME, None)
